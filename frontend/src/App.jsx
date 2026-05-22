@@ -1,16 +1,27 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import MainLayout from "./layouts/MainLayout";
+import KasirPage from "./pages/kasir/KasirPage";
+import BarangPage from "./pages/barang/BarangPage";
+import TransaksiPage from "./pages/transaksi/TransaksiPage";
+import LaporanPage from "./pages/laporan/LaporanPage";
+import PengeluaranPage from "./pages/pengeluaran/PengeluaranPage";
+import PengaturanPage from "./pages/pengaturan/PengaturanPage";
+
 function App() {
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-      <div className="bg-white p-8 rounded-2xl shadow">
-        <h1 className="text-3xl font-bold text-blue-600">
-          Nikky Frozen POS System
-        </h1>
-        <p className="mt-2 text-gray-600">
-          React dan Tailwind CSS berhasil dijalankan.
-        </p>
-      </div>
-    </div>
-  )
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<MainLayout />}>
+          <Route index element={<KasirPage />} />
+          <Route path="barang" element={<BarangPage />} />
+          <Route path="transaksi" element={<TransaksiPage />} />
+          <Route path="laporan" element={<LaporanPage />} />
+          <Route path="pengeluaran" element={<PengeluaranPage />} />
+          <Route path="pengaturan" element={<PengaturanPage />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
