@@ -1,1029 +1,676 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  Boxes,
+  Building2,
+  CalendarClock,
+  CheckCircle2,
+  Clock3,
+  PackageCheck,
+  PackageX,
+  ReceiptText,
+  RefreshCw,
+  ShoppingBag,
+  TrendingUp,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
-import { getExpenses, getProducts, getTransactions } from "../../services/api";
-
-const initialCashiers = [
+const transactions = [
   {
     id: 1,
-    name: "Kasir Cabang 1",
-    username: "kasir1",
+    invoice: "TRX-001",
+    date: new Date().toISOString(),
     branch: "Cabang 1",
-    shift: "Shift Pagi",
-    status: "Aktif",
-    lastLogin: "2026-05-24 08:00",
+    cashier: "Kasir 1",
+    payment: "Tunai",
+    status: "Lunas",
+    total: 120000,
   },
   {
     id: 2,
-    name: "Kasir Cabang 2",
-    username: "kasir2",
+    invoice: "TRX-002",
+    date: new Date().toISOString(),
     branch: "Cabang 2",
-    shift: "Shift Sore",
-    status: "Aktif",
-    lastLogin: "2026-05-24 15:00",
+    cashier: "Kasir 2",
+    payment: "QRIS",
+    status: "Lunas",
+    total: 85000,
+  },
+  {
+    id: 3,
+    invoice: "TRX-003",
+    date: new Date(Date.now() - 86400000).toISOString(),
+    branch: "Cabang 1",
+    cashier: "Kasir 1",
+    payment: "Transfer",
+    status: "Lunas",
+    total: 450000,
+  },
+  {
+    id: 4,
+    invoice: "TRX-004",
+    date: new Date(Date.now() - 2 * 86400000).toISOString(),
+    branch: "Cabang 2",
+    cashier: "Kasir 2",
+    payment: "QRIS",
+    status: "Lunas",
+    total: 295000,
+  },
+  {
+    id: 5,
+    invoice: "TRX-005",
+    date: new Date(Date.now() - 3 * 86400000).toISOString(),
+    branch: "Cabang 1",
+    cashier: "Kasir 1",
+    payment: "Tunai",
+    status: "Lunas",
+    total: 275000,
   },
 ];
 
-const initialLoginActivities = [
+const products = [
   {
     id: 1,
-    name: "Kasir Cabang 1",
-    username: "kasir1",
-    role: "Kasir",
+    name: "Nugget Ayam",
     branch: "Cabang 1",
-    shift: "Shift Pagi",
-    loginTime: "2026-05-24 08:00:00",
-    logoutTime: "-",
-    status: "Login",
-    device: "Chrome - Windows",
+    stock: 8,
+    minStock: 10,
+    expiredDate: new Date(Date.now() + 20 * 86400000).toISOString(),
   },
   {
     id: 2,
-    name: "Kasir Cabang 2",
-    username: "kasir2",
-    role: "Kasir",
+    name: "Sosis Sapi",
     branch: "Cabang 2",
-    shift: "Shift Sore",
-    loginTime: "2026-05-24 15:00:00",
-    logoutTime: "-",
-    status: "Login",
-    device: "Chrome - Windows",
+    stock: 4,
+    minStock: 10,
+    expiredDate: new Date(Date.now() + 8 * 86400000).toISOString(),
+  },
+  {
+    id: 3,
+    name: "Chicken Wings",
+    branch: "Cabang 1",
+    stock: 24,
+    minStock: 10,
+    expiredDate: new Date(Date.now() + 45 * 86400000).toISOString(),
+  },
+  {
+    id: 4,
+    name: "Beef Slice",
+    branch: "Cabang 2",
+    stock: 0,
+    minStock: 8,
+    expiredDate: new Date(Date.now() + 6 * 86400000).toISOString(),
+  },
+  {
+    id: 5,
+    name: "Dimsum Ayam",
+    branch: "Cabang 1",
+    stock: 16,
+    minStock: 10,
+    expiredDate: new Date(Date.now() + 12 * 86400000).toISOString(),
   },
 ];
 
-const initialPermissions = [
-  { id: "pos", kasirAccess: true },
-  { id: "barang", kasirAccess: true },
-  { id: "transaksi", kasirAccess: true },
-  { id: "pengeluaran", kasirAccess: false },
-  { id: "laporan", kasirAccess: false },
-  { id: "data_kasir", kasirAccess: false },
-  { id: "aktivitas_login", kasirAccess: false },
-  { id: "role_permission", kasirAccess: false },
-  { id: "pengaturan", kasirAccess: false },
-];
-
-const branches = ["Cabang 1", "Cabang 2"];
-
-function formatRupiah(value) {
+function rupiah(value) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: 0,
-  }).format(value || 0);
+  }).format(Number(value || 0));
 }
 
-function formatDateTime(dateString) {
-  if (!dateString) return "-";
+function shortRupiah(value) {
+  const number = Number(value || 0);
+  if (number >= 1000000) return `Rp ${(number / 1000000).toFixed(1).replace(".", ",")}jt`;
+  if (number >= 1000) return `Rp ${Math.round(number / 1000)}rb`;
+  return `Rp ${number}`;
+}
 
-  const date = new Date(dateString);
-
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return date.toLocaleString("id-ID", {
+function formatDate(dateString) {
+  return new Date(dateString).toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",
+  });
+}
+
+function formatTime(dateString) {
+  return new Date(dateString).toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
-function formatDateOnly(dateString) {
-  if (!dateString) return "-";
-
+function isToday(dateString) {
   const date = new Date(dateString);
+  const now = new Date();
 
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return date.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
 }
 
-function getSavedData(key, fallbackData) {
-  const savedData = localStorage.getItem(key);
-
-  if (!savedData) {
-    return fallbackData;
-  }
-
-  try {
-    return JSON.parse(savedData);
-  } catch (error) {
-    localStorage.removeItem(key);
-    return fallbackData;
-  }
+function dateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-function getBranchNameById(branchId) {
-  if (Number(branchId) === 1) return "Cabang 1";
-  if (Number(branchId) === 2) return "Cabang 2";
-
-  return "-";
-}
-
-function getDaysUntilExpired(expiredDate) {
-  if (!expiredDate) return null;
-
+function daysUntilExpired(dateString) {
   const today = new Date();
-  const expired = new Date(`${String(expiredDate).slice(0, 10)}T00:00:00`);
+  const expired = new Date(dateString);
 
   today.setHours(0, 0, 0, 0);
+  expired.setHours(0, 0, 0, 0);
 
-  if (Number.isNaN(expired.getTime())) return null;
-
-  const diffTime = expired.getTime() - today.getTime();
-
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return Math.ceil((expired.getTime() - today.getTime()) / 86400000);
 }
 
-function normalizeProduct(product) {
-  return {
-    id: product.id,
-    branch_id: product.branch_id,
-    branch: product.branch?.name || getBranchNameById(product.branch_id),
-    code: product.code,
-    name: product.name,
-    category: product.category,
-    stock: Number(product.stock || 0),
-    minStock: Number(product.min_stock || 0),
-    price: Number(product.price || 0),
-    expiredDate: product.expired_date,
-    storageLocation: product.storage_location || "-",
-    status: product.status || "Aktif",
-  };
-}
+function buildSalesChart() {
+  const result = [];
+  const today = new Date();
 
-function normalizeTransaction(transaction) {
-  return {
-    id: transaction.id,
-    invoiceNumber: transaction.invoice_number,
-    transactionDate: transaction.transaction_date,
-    branch_id: transaction.branch_id,
-    branch: transaction.branch?.name || getBranchNameById(transaction.branch_id),
-    cashierName: transaction.cashier_name || "-",
-    username: transaction.username || "-",
-    shift: transaction.shift_name || "-",
-    paymentMethod: transaction.payment_method || "-",
-    status: transaction.status || "-",
-    totalItem: Number(transaction.total_item || 0),
-    subtotal: Number(transaction.subtotal || 0),
-    tax: Number(transaction.tax || 0),
-    discount: Number(transaction.discount || 0),
-    grandTotal: Number(transaction.grand_total || 0),
-    items: (transaction.items || []).map((item) => ({
-      id: item.id,
-      product_id: item.product_id,
-      code: item.product_code,
-      name: item.product_name,
-      category: item.category,
-      price: Number(item.price || 0),
-      quantity: Number(item.quantity || 0),
-      subtotal: Number(item.subtotal || 0),
-    })),
-  };
-}
+  for (let index = 6; index >= 0; index -= 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - index);
 
-function normalizeExpense(expense) {
-  return {
-    id: expense.id,
-    branch_id: expense.branch_id,
-    branch: expense.branch?.name || getBranchNameById(expense.branch_id),
-    expenseDate: expense.expense_date,
-    category: expense.category || "-",
-    description: expense.description || "-",
-    amount: Number(expense.amount || 0),
-    userName: expense.user_name || "-",
-    username: expense.username || "-",
-    status: expense.status || "Aktif",
-  };
-}
-
-function getBestSeller(transactions) {
-  const productMap = {};
+    result.push({
+      key: dateKey(date),
+      label: date.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+      }),
+      penjualan: 0,
+      transaksi: 0,
+    });
+  }
 
   transactions.forEach((transaction) => {
-    transaction.items.forEach((item) => {
-      if (!productMap[item.name]) {
-        productMap[item.name] = {
-          name: item.name,
-          quantity: 0,
-        };
-      }
+    const point = result.find((item) => item.key === dateKey(new Date(transaction.date)));
 
-      productMap[item.name].quantity += Number(item.quantity || 0);
-    });
+    if (point) {
+      point.penjualan += transaction.total;
+      point.transaksi += 1;
+    }
   });
 
-  const sortedProducts = Object.values(productMap).sort(
-    (a, b) => b.quantity - a.quantity
-  );
+  return result;
+}
 
-  return sortedProducts[0]?.name || "-";
+function Card({ children, className = "" }) {
+  return (
+    <div className={`rounded-[22px] border border-gray-200 bg-white shadow-sm ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function Badge({ children, variant = "gray" }) {
+  const variants = {
+    green: "bg-green-50 text-green-700 ring-green-100",
+    orange: "bg-orange-50 text-orange-700 ring-orange-100",
+    red: "bg-red-50 text-red-700 ring-red-100",
+    blue: "bg-sky-50 text-[#0B7FC3] ring-sky-100",
+    gray: "bg-gray-50 text-gray-600 ring-gray-100",
+  };
+
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-black ring-1 ${variants[variant]}`}>
+      {children}
+    </span>
+  );
+}
+
+function StatCard({ title, value, caption, icon: Icon, tone = "blue" }) {
+  const tones = {
+    blue: "bg-sky-50 text-[#0B7FC3]",
+    green: "bg-green-50 text-green-600",
+    orange: "bg-orange-50 text-orange-600",
+    red: "bg-red-50 text-red-600",
+  };
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-500">{title}</p>
+          <h3 className="mt-2 truncate text-2xl font-black text-gray-950">{value}</h3>
+          <p className="mt-3 text-xs font-medium leading-relaxed text-gray-500">
+            {caption}
+          </p>
+        </div>
+
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${tones[tone]}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 function OwnerDashboard() {
-  const [currentUser, setCurrentUser] = useState(null);
-
-  const [products, setProducts] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-
-  const [cashiers, setCashiers] = useState(initialCashiers);
-  const [loginActivities, setLoginActivities] = useState(
-    initialLoginActivities
-  );
-  const [permissions, setPermissions] = useState(initialPermissions);
-
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [lastUpdated, setLastUpdated] = useState(null);
 
-  const fetchDashboardData = async () => {
-    try {
-      setIsLoading(true);
-      setErrorMessage("");
-
-      const [productData, transactionData, expenseData] = await Promise.all([
-        getProducts(),
-        getTransactions(),
-        getExpenses(),
-      ]);
-
-      setProducts(productData.map(normalizeProduct));
-      setTransactions(transactionData.map(normalizeTransaction));
-      setExpenses(expenseData.map(normalizeExpense));
-      setLastUpdated(new Date());
-    } catch (error) {
-      setErrorMessage(
-        error.message ||
-          "Gagal mengambil data dashboard dari backend. Pastikan Laravel server berjalan."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    const savedUser = localStorage.getItem("nikky_user");
-
-    if (savedUser) {
-      try {
-        setCurrentUser(JSON.parse(savedUser));
-      } catch (error) {
-        setCurrentUser(null);
-      }
-    }
-
-    setCashiers(getSavedData("nikky_cashiers", initialCashiers));
-    setLoginActivities(
-      getSavedData("nikky_login_activities", initialLoginActivities)
-    );
-    setPermissions(getSavedData("nikky_permissions", initialPermissions));
-
-    fetchDashboardData();
-
-    const interval = setInterval(() => {
-      fetchDashboardData();
-    }, 3000);
-
-    return () => clearInterval(interval);
+  const todayTransactions = useMemo(() => {
+    return transactions.filter((item) => isToday(item.date));
   }, []);
 
-  const successfulTransactions = useMemo(() => {
-    return transactions.filter((transaction) => transaction.status === "Berhasil");
-  }, [transactions]);
+  const todayRevenue = todayTransactions.reduce((sum, item) => sum + item.total, 0);
 
-  const activeExpenses = useMemo(() => {
-    return expenses.filter((expense) => expense.status === "Aktif");
-  }, [expenses]);
-
-  const stockAlerts = useMemo(() => {
+  const lowStockProducts = useMemo(() => {
     return products
-      .filter((product) => product.stock <= product.minStock)
+      .filter((item) => item.stock > 0 && item.stock <= item.minStock)
       .sort((a, b) => a.stock - b.stock);
-  }, [products]);
+  }, []);
 
-  const expiredAlerts = useMemo(() => {
+  const emptyStockProducts = useMemo(() => {
+    return products.filter((item) => item.stock <= 0);
+  }, []);
+
+  const expiringProducts = useMemo(() => {
     return products
-      .map((product) => ({
-        ...product,
-        daysLeft: getDaysUntilExpired(product.expiredDate),
+      .map((item) => ({
+        ...item,
+        daysLeft: daysUntilExpired(item.expiredDate),
       }))
-      .filter(
-        (product) =>
-          product.daysLeft !== null &&
-          product.daysLeft >= 0 &&
-          product.daysLeft <= 60
-      )
+      .filter((item) => item.daysLeft >= 0 && item.daysLeft <= 14)
       .sort((a, b) => a.daysLeft - b.daysLeft);
-  }, [products]);
+  }, []);
 
-  const dashboardSummary = useMemo(() => {
-    const totalRevenue = successfulTransactions.reduce(
-      (total, transaction) => total + Number(transaction.grandTotal || 0),
-      0
-    );
+  const salesChart = useMemo(() => buildSalesChart(), []);
 
-    const totalExpenses = activeExpenses.reduce(
-      (total, expense) => total + Number(expense.amount || 0),
-      0
-    );
-
-    const totalTransactions = successfulTransactions.length;
-    const totalProfit = totalRevenue - totalExpenses;
-
-    const activeCashiers = cashiers.filter(
-      (cashier) => cashier.status === "Aktif"
-    ).length;
-
-    const activeLogin = loginActivities.filter(
-      (activity) => activity.status === "Login"
-    ).length;
-
-    const activeKasirPermission = permissions.filter(
-      (permission) => permission.kasirAccess
-    ).length;
-
-    return {
-      totalRevenue,
-      totalExpenses,
-      totalTransactions,
-      totalProfit,
-      activeCashiers,
-      activeLogin,
-      activeKasirPermission,
-      totalProducts: products.length,
-      stockLow: stockAlerts.length,
-      expiredWarning: expiredAlerts.length,
-    };
-  }, [
-    successfulTransactions,
-    activeExpenses,
-    cashiers,
-    loginActivities,
-    permissions,
-    products,
-    stockAlerts,
-    expiredAlerts,
-  ]);
-
-  const branchSummaries = useMemo(() => {
-    return branches.map((branch) => {
-      const branchTransactions = successfulTransactions.filter(
-        (transaction) => transaction.branch === branch
-      );
-
-      const branchExpenses = activeExpenses.filter(
-        (expense) => expense.branch === branch
-      );
-
-      const branchProducts = products.filter(
-        (product) => product.branch === branch
-      );
-
-      const revenue = branchTransactions.reduce(
-        (total, transaction) => total + Number(transaction.grandTotal || 0),
-        0
-      );
-
-      const expense = branchExpenses.reduce(
-        (total, item) => total + Number(item.amount || 0),
-        0
-      );
-
-      const stockLow = branchProducts.filter(
-        (product) => product.stock <= product.minStock
-      ).length;
+  const branchPerformance = useMemo(() => {
+    return ["Cabang 1", "Cabang 2"].map((branch) => {
+      const branchTransactions = todayTransactions.filter((item) => item.branch === branch);
+      const revenue = branchTransactions.reduce((sum, item) => sum + item.total, 0);
 
       return {
         branch,
         revenue,
-        expenses: expense,
         transactions: branchTransactions.length,
-        stockLow,
-        products: branchProducts.length,
-        bestSeller: getBestSeller(branchTransactions),
-        profit: revenue - expense,
+        status: revenue >= 150000 ? "Stabil" : "Perlu dicek",
       };
     });
-  }, [successfulTransactions, activeExpenses, products]);
+  }, [todayTransactions]);
+
+  const priorities = useMemo(() => {
+    const result = [];
+
+    if (emptyStockProducts.length > 0) {
+      result.push({
+        title: `${emptyStockProducts.length} produk stok habis`,
+        description: "Segera cek ketersediaan barang di cabang terkait.",
+        tone: "red",
+      });
+    }
+
+    if (lowStockProducts.length > 0) {
+      result.push({
+        title: `${lowStockProducts.length} produk stok menipis`,
+        description: "Prioritaskan restock sebelum penjualan terganggu.",
+        tone: "orange",
+      });
+    }
+
+    if (expiringProducts.length > 0) {
+      result.push({
+        title: `${expiringProducts.length} produk hampir expired`,
+        description: "Evaluasi promo atau prioritas penjualan produk tersebut.",
+        tone: "red",
+      });
+    }
+
+    const branchNeedCheck = branchPerformance.find((item) => item.status === "Perlu dicek");
+
+    if (branchNeedCheck) {
+      result.push({
+        title: `${branchNeedCheck.branch} perlu dicek`,
+        description: "Pendapatan hari ini masih rendah dibanding target awal.",
+        tone: "blue",
+      });
+    }
+
+    if (result.length === 0) {
+      result.push({
+        title: "Operasional toko aman",
+        description: "Belum ada prioritas mendesak untuk hari ini.",
+        tone: "green",
+      });
+    }
+
+    return result.slice(0, 4);
+  }, [emptyStockProducts, lowStockProducts, expiringProducts, branchPerformance]);
 
   const recentTransactions = useMemo(() => {
-    return [...successfulTransactions]
-      .sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate))
+    return [...transactions]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 5);
-  }, [successfulTransactions]);
-
-  const recentExpenses = useMemo(() => {
-    return [...activeExpenses]
-      .sort((a, b) => new Date(b.expenseDate) - new Date(a.expenseDate))
-      .slice(0, 5);
-  }, [activeExpenses]);
-
-  const recentActivities = useMemo(() => {
-    return [...loginActivities].slice(0, 5);
-  }, [loginActivities]);
-
-  const cashierByBranch = useMemo(() => {
-    return {
-      branchOne: cashiers.filter((cashier) => cashier.branch === "Cabang 1")
-        .length,
-      branchTwo: cashiers.filter((cashier) => cashier.branch === "Cabang 2")
-        .length,
-    };
-  }, [cashiers]);
+  }, []);
 
   const handleRefresh = () => {
-    fetchDashboardData();
+    setIsLoading(true);
+
+    setTimeout(() => {
+      setIsLoading(false);
+    }, 600);
   };
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="min-h-screen bg-[#F3F4F6] px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">
-            Dashboard Owner
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Monitoring performa toko, transaksi, pengeluaran, stok, dan
-            aktivitas Cabang 1 serta Cabang 2 dari backend.
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B7FC3]">
+            Owner Dashboard
+          </p>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-gray-950 sm:text-3xl">
+            Ringkasan Operasional Hari Ini
+          </h1>
+          <p className="mt-1 text-sm font-medium text-gray-500">
+            Pantau penjualan, transaksi, stok menipis, dan produk hampir expired.
           </p>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className="rounded-2xl border border-blue-200 bg-white px-5 py-3 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-50"
-          >
-            Refresh Data
-          </button>
-
-          <div className="rounded-2xl bg-white px-5 py-4 shadow-sm">
-            <p className="text-xs text-slate-500">Login sebagai</p>
-            <p className="mt-1 text-sm font-bold text-slate-800">
-              {currentUser?.name || "Owner Nikky Frozen"}
-            </p>
-            <p className="text-xs text-slate-500">
-              {currentUser?.branch || "Semua Cabang"} •{" "}
-              {currentUser?.shift || "Monitoring Owner"}
-            </p>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-700 shadow-sm transition hover:bg-gray-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
       </div>
 
-      {errorMessage && (
-        <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
-          {errorMessage}
-        </div>
-      )}
+      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Penjualan Hari Ini"
+          value={rupiah(todayRevenue)}
+          caption="Total transaksi lunas pada hari ini."
+          icon={ArrowUpRight}
+          tone="green"
+        />
 
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-5 py-4 shadow-sm">
-        <div>
-          <p className="text-sm font-bold text-slate-700">
-            Status Sinkronisasi Backend
-          </p>
-          <p className="text-xs text-slate-500">
-            Dashboard otomatis mengambil ulang data setiap 3 detik.
-          </p>
-        </div>
+        <StatCard
+          title="Transaksi Hari Ini"
+          value={todayTransactions.length}
+          caption="Jumlah transaksi yang berhasil diproses."
+          icon={ReceiptText}
+          tone="blue"
+        />
 
-        <div className="text-right">
-          <p
-            className={`text-sm font-bold ${
-              isLoading ? "text-yellow-600" : "text-green-600"
-            }`}
-          >
-            {isLoading ? "Mengambil data..." : "Terhubung"}
-          </p>
-          <p className="text-xs text-slate-500">
-            Update terakhir: {lastUpdated ? formatDateTime(lastUpdated) : "-"}
-          </p>
-        </div>
+        <StatCard
+          title="Stok Menipis"
+          value={lowStockProducts.length + emptyStockProducts.length}
+          caption="Produk yang perlu restock atau sudah habis."
+          icon={Boxes}
+          tone="orange"
+        />
+
+        <StatCard
+          title="Hampir Expired"
+          value={expiringProducts.length}
+          caption="Produk dengan masa expired maksimal 14 hari."
+          icon={CalendarClock}
+          tone="red"
+        />
       </div>
 
-      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">Total Pendapatan</p>
-            <span className="rounded-xl bg-green-50 px-3 py-2 text-xl">
-              💰
-            </span>
-          </div>
-          <h3 className="mt-3 text-2xl font-bold text-green-600">
-            {formatRupiah(dashboardSummary.totalRevenue)}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Dari transaksi Cabang 1 dan Cabang 2
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">Total Pengeluaran</p>
-            <span className="rounded-xl bg-red-50 px-3 py-2 text-xl">💸</span>
-          </div>
-          <h3 className="mt-3 text-2xl font-bold text-red-600">
-            {formatRupiah(dashboardSummary.totalExpenses)}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Dari data expenses backend
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">Laba Kotor</p>
-            <span className="rounded-xl bg-blue-50 px-3 py-2 text-xl">📈</span>
-          </div>
-          <h3
-            className={`mt-3 text-2xl font-bold ${
-              dashboardSummary.totalProfit >= 0
-                ? "text-blue-600"
-                : "text-red-600"
-            }`}
-          >
-            {formatRupiah(dashboardSummary.totalProfit)}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Pendapatan dikurangi pengeluaran
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">Total Transaksi</p>
-            <span className="rounded-xl bg-purple-50 px-3 py-2 text-xl">
-              🧾
-            </span>
-          </div>
-          <h3 className="mt-3 text-2xl font-bold text-purple-600">
-            {dashboardSummary.totalTransactions}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Transaksi berhasil dari backend
-          </p>
-        </div>
-      </div>
-
-      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Kasir Aktif</p>
-          <h3 className="mt-2 text-2xl font-bold text-slate-800">
-            {dashboardSummary.activeCashiers}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Dari {cashiers.length} data kasir
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Sedang Login</p>
-          <h3 className="mt-2 text-2xl font-bold text-green-600">
-            {dashboardSummary.activeLogin}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Aktivitas user yang masih login
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Stok Menipis</p>
-          <h3 className="mt-2 text-2xl font-bold text-yellow-600">
-            {dashboardSummary.stockLow}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Produk perlu dipantau/restock
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Mendekati Expired</p>
-          <h3 className="mt-2 text-2xl font-bold text-orange-600">
-            {dashboardSummary.expiredWarning}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Produk perlu dicek tanggal kedaluwarsa
-          </p>
-        </div>
-      </div>
-
-      <div className="mb-6 grid gap-5 xl:grid-cols-2">
-        {branchSummaries.map((branch) => (
-          <div key={branch.branch} className="rounded-2xl bg-white p-5 shadow-sm">
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">
-                  {branch.branch}
-                </h3>
-                <p className="text-sm text-slate-500">
-                  Ringkasan performa cabang dari backend
-                </p>
-              </div>
-
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-bold ${
-                  branch.branch === "Cabang 1"
-                    ? "bg-blue-100 text-blue-700"
-                    : "bg-purple-100 text-purple-700"
-                }`}
-              >
-                Aktif
-              </span>
+      <div className="grid gap-4 xl:grid-cols-[1.45fr_1fr]">
+        <Card className="p-5">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">
+                Tren Penjualan 7 Hari
+              </h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Grafik untuk melihat penjualan naik, turun, atau stabil.
+              </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">Pendapatan</p>
-                <p className="mt-1 text-lg font-bold text-green-600">
-                  {formatRupiah(branch.revenue)}
-                </p>
-              </div>
+            <TrendingUp className="h-5 w-5 text-[#0B7FC3]" />
+          </div>
 
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">Pengeluaran</p>
-                <p className="mt-1 text-lg font-bold text-red-600">
-                  {formatRupiah(branch.expenses)}
-                </p>
-              </div>
+          <div className="h-[320px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={salesChart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#0B7FC3" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#0B7FC3" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 12, fill: "#6B7280", fontWeight: 600 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tickFormatter={shortRupiah}
+                  tick={{ fontSize: 12, fill: "#6B7280", fontWeight: 600 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip formatter={(value) => rupiah(value)} />
+                <Area
+                  type="monotone"
+                  dataKey="penjualan"
+                  stroke="#0B7FC3"
+                  strokeWidth={3}
+                  fill="url(#salesGradient)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
 
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">Laba</p>
-                <p
-                  className={`mt-1 text-lg font-bold ${
-                    branch.profit >= 0 ? "text-blue-600" : "text-red-600"
-                  }`}
-                >
-                  {formatRupiah(branch.profit)}
-                </p>
-              </div>
-
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">Transaksi</p>
-                <p className="mt-1 text-lg font-bold text-slate-800">
-                  {branch.transactions}
-                </p>
-              </div>
+        <Card className="p-5">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">
+                Prioritas Hari Ini
+              </h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Hal yang perlu dilihat owner terlebih dahulu.
+              </p>
             </div>
 
-            <div className="mt-4 rounded-2xl bg-slate-50 p-4">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-slate-500">Produk terlaris</span>
-                <span className="font-bold text-slate-800">
-                  {branch.bestSeller}
-                </span>
-              </div>
-
-              <div className="mt-2 flex items-center justify-between gap-3 text-sm">
-                <span className="text-slate-500">Total produk</span>
-                <span className="font-bold text-slate-800">
-                  {branch.products} produk
-                </span>
-              </div>
-
-              <div className="mt-2 flex items-center justify-between gap-3 text-sm">
-                <span className="text-slate-500">Stok menipis</span>
-                <span className="font-bold text-yellow-600">
-                  {branch.stockLow} produk
-                </span>
-              </div>
-            </div>
+            <AlertTriangle className="h-5 w-5 text-orange-500" />
           </div>
-        ))}
-      </div>
-
-      <div className="mb-6 grid gap-5 xl:grid-cols-3">
-        <div className="rounded-2xl bg-white p-5 shadow-sm xl:col-span-2">
-          <div className="mb-5">
-            <h3 className="text-lg font-bold text-slate-800">
-              Transaksi Terbaru
-            </h3>
-            <p className="text-sm text-slate-500">
-              Transaksi terbaru dari Cabang 1 dan Cabang 2.
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[750px] border-collapse">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50 text-left text-sm text-slate-500">
-                  <th className="px-4 py-4 font-semibold">Invoice</th>
-                  <th className="px-4 py-4 font-semibold">Cabang</th>
-                  <th className="px-4 py-4 font-semibold">Kasir</th>
-                  <th className="px-4 py-4 font-semibold">Waktu</th>
-                  <th className="px-4 py-4 text-right font-semibold">Total</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {recentTransactions.length > 0 ? (
-                  recentTransactions.map((transaction) => (
-                    <tr
-                      key={transaction.id}
-                      className="border-b border-slate-100 text-sm hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-4 font-bold text-slate-800">
-                        {transaction.invoiceNumber}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${
-                            transaction.branch === "Cabang 1"
-                              ? "bg-blue-100 text-blue-700"
-                              : "bg-purple-100 text-purple-700"
-                          }`}
-                        >
-                          {transaction.branch}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4 text-slate-600">
-                        {transaction.cashierName}
-                      </td>
-
-                      <td className="px-4 py-4 text-slate-600">
-                        {formatDateTime(transaction.transactionDate)}
-                      </td>
-
-                      <td className="px-4 py-4 text-right font-bold text-green-600">
-                        {formatRupiah(transaction.grandTotal)}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan="5"
-                      className="px-4 py-10 text-center text-sm text-slate-500"
-                    >
-                      Belum ada transaksi.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800">
-            Pengeluaran Terbaru
-          </h3>
-          <p className="mb-4 text-sm text-slate-500">
-            Data expenses terbaru.
-          </p>
 
           <div className="space-y-3">
-            {recentExpenses.map((expense) => (
-              <div
-                key={expense.id}
-                className="rounded-2xl border border-slate-100 p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-slate-800">
-                      {expense.category}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {expense.branch} • {formatDateOnly(expense.expenseDate)}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {expense.description}
-                    </p>
+            {priorities.map((item, index) => (
+              <div key={`${item.title}-${index}`} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
+                      item.tone === "red"
+                        ? "bg-red-50 text-red-600"
+                        : item.tone === "orange"
+                        ? "bg-orange-50 text-orange-600"
+                        : item.tone === "green"
+                        ? "bg-green-50 text-green-600"
+                        : "bg-sky-50 text-[#0B7FC3]"
+                    }`}
+                  >
+                    {item.tone === "green" ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4" />
+                    )}
                   </div>
 
-                  <p className="text-sm font-bold text-red-600">
-                    {formatRupiah(expense.amount)}
-                  </p>
+                  <div>
+                    <p className="text-sm font-black text-gray-950">{item.title}</p>
+                    <p className="mt-1 text-xs font-semibold leading-relaxed text-gray-500">
+                      {item.description}
+                    </p>
+                  </div>
                 </div>
               </div>
             ))}
+          </div>
+        </Card>
 
-            {recentExpenses.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-                Belum ada pengeluaran.
+        <Card className="p-5 xl:col-span-2">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">
+                Performa Cabang Hari Ini
+              </h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Ringkasan singkat agar owner tahu cabang mana yang perlu dicek.
+              </p>
+            </div>
+
+            <Building2 className="h-5 w-5 text-[#0B7FC3]" />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {branchPerformance.map((item) => (
+              <div key={item.branch} className="rounded-[20px] border border-gray-200 bg-gray-50 p-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-base font-black text-gray-950">{item.branch}</h3>
+                  <Badge variant={item.status === "Stabil" ? "green" : "orange"}>
+                    {item.status}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-white p-4">
+                    <p className="text-xs font-semibold text-gray-500">Penjualan</p>
+                    <p className="mt-1 text-lg font-black text-gray-950">{rupiah(item.revenue)}</p>
+                  </div>
+
+                  <div className="rounded-2xl bg-white p-4">
+                    <p className="text-xs font-semibold text-gray-500">Transaksi</p>
+                    <p className="mt-1 text-lg font-black text-gray-950">{item.transactions}</p>
+                  </div>
+                </div>
               </div>
-            )}
+            ))}
           </div>
-        </div>
-      </div>
+        </Card>
 
-      <div className="mb-6 grid gap-5 xl:grid-cols-3">
-        <div className="rounded-2xl bg-white p-5 shadow-sm xl:col-span-2">
-          <div className="mb-5">
-            <h3 className="text-lg font-bold text-slate-800">
-              Aktivitas Login Terbaru
-            </h3>
-            <p className="text-sm text-slate-500">
-              Aktivitas login masih membaca data lokal sampai backend user login
-              dibuat.
-            </p>
+        <Card className="p-5">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">Alert Stok</h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Produk yang habis atau mendekati minimum stok.
+              </p>
+            </div>
+
+            <PackageX className="h-5 w-5 text-orange-500" />
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[750px] border-collapse">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50 text-left text-sm text-slate-500">
-                  <th className="px-4 py-4 font-semibold">Pengguna</th>
-                  <th className="px-4 py-4 font-semibold">Cabang</th>
-                  <th className="px-4 py-4 font-semibold">Shift</th>
-                  <th className="px-4 py-4 font-semibold">Login</th>
-                  <th className="px-4 py-4 font-semibold">Status</th>
+          <div className="space-y-3">
+            {[...emptyStockProducts, ...lowStockProducts].slice(0, 5).map((item) => (
+              <div key={`stock-${item.id}`} className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate font-black text-gray-950">{item.name}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-gray-500">
+                    {item.branch} - Minimal {item.minStock}
+                  </p>
+                </div>
+
+                <Badge variant={item.stock <= 0 ? "red" : "orange"}>
+                  {item.stock <= 0 ? "Habis" : `${item.stock} stok`}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">Hampir Expired</h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Produk yang perlu diprioritaskan sebelum kedaluwarsa.
+              </p>
+            </div>
+
+            <PackageCheck className="h-5 w-5 text-red-500" />
+          </div>
+
+          <div className="space-y-3">
+            {expiringProducts.slice(0, 5).map((item) => (
+              <div key={`expired-${item.id}`} className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate font-black text-gray-950">{item.name}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-gray-500">
+                    {item.branch} - Exp {formatDate(item.expiredDate)}
+                  </p>
+                </div>
+
+                <Badge variant={item.daysLeft <= 7 ? "red" : "orange"}>
+                  {item.daysLeft} hari
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-5 xl:col-span-2">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">Transaksi Terbaru</h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Lima transaksi terakhir yang berhasil diproses.
+              </p>
+            </div>
+
+            <ShoppingBag className="h-5 w-5 text-[#0B7FC3]" />
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-gray-200">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">Invoice</th>
+                  <th className="px-4 py-3">Waktu</th>
+                  <th className="px-4 py-3">Cabang</th>
+                  <th className="px-4 py-3">Kasir</th>
+                  <th className="px-4 py-3">Metode</th>
+                  <th className="px-4 py-3 text-right">Total</th>
                 </tr>
               </thead>
 
-              <tbody>
-                {recentActivities.length > 0 ? (
-                  recentActivities.map((activity) => (
-                    <tr
-                      key={activity.id}
-                      className="border-b border-slate-100 text-sm hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-4">
-                        <p className="font-bold text-slate-800">
-                          {activity.name}
-                        </p>
-                        <p className="text-xs text-slate-400">
-                          @{activity.username}
-                        </p>
-                      </td>
-
-                      <td className="px-4 py-4 text-slate-600">
-                        {activity.branch}
-                      </td>
-
-                      <td className="px-4 py-4 text-slate-600">
-                        {activity.shift}
-                      </td>
-
-                      <td className="px-4 py-4 text-slate-600">
-                        {activity.loginTime}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${
-                            activity.status === "Login"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
-                          }`}
-                        >
-                          {activity.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan="5"
-                      className="px-4 py-10 text-center text-sm text-slate-500"
-                    >
-                      Belum ada aktivitas login.
+              <tbody className="divide-y divide-gray-100">
+                {recentTransactions.map((item) => (
+                  <tr key={item.id} className="bg-white">
+                    <td className="px-4 py-3 font-black text-gray-950">{item.invoice}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <Clock3 className="h-4 w-4 text-gray-400" />
+                        {formatDate(item.date)} - {formatTime(item.date)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">{item.branch}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">{item.cashier}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">{item.payment}</td>
+                    <td className="px-4 py-3 text-right font-black text-gray-950">
+                      {rupiah(item.total)}
                     </td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-        </div>
-
-        <div className="space-y-5">
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-800">
-              Distribusi Kasir
-            </h3>
-
-            <div className="mt-4 space-y-3">
-              <div className="rounded-2xl bg-blue-50 p-4">
-                <div className="flex items-center justify-between">
-                  <p className="font-bold text-blue-700">Cabang 1</p>
-                  <span className="text-xl font-bold text-blue-700">
-                    {cashierByBranch.branchOne}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-blue-600">
-                  Kasir terdaftar di Cabang 1
-                </p>
-              </div>
-
-              <div className="rounded-2xl bg-purple-50 p-4">
-                <div className="flex items-center justify-between">
-                  <p className="font-bold text-purple-700">Cabang 2</p>
-                  <span className="text-xl font-bold text-purple-700">
-                    {cashierByBranch.branchTwo}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-purple-600">
-                  Kasir terdaftar di Cabang 2
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-800">
-              Permission Kasir Aktif
-            </h3>
-
-            <h3 className="mt-3 text-2xl font-bold text-blue-600">
-              {dashboardSummary.activeKasirPermission}
-            </h3>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Akses kasir yang diizinkan owner.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
-        <div className="mb-5">
-          <h3 className="text-lg font-bold text-slate-800">
-            Peringatan Stok
-          </h3>
-          <p className="text-sm text-slate-500">
-            Produk yang stoknya berada di bawah atau sama dengan minimum stok.
-          </p>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {stockAlerts.map((item) => (
-            <div
-              key={item.id}
-              className="rounded-2xl border border-yellow-100 bg-yellow-50 p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-bold text-slate-800">{item.name}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {item.branch} • {item.code}
-                  </p>
-                </div>
-
-                <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-700">
-                  Stok Menipis
-                </span>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-xl bg-white p-3">
-                  <p className="text-xs text-slate-400">Stok Saat Ini</p>
-                  <p className="mt-1 font-bold text-red-600">{item.stock}</p>
-                </div>
-
-                <div className="rounded-xl bg-white p-3">
-                  <p className="text-xs text-slate-400">Minimal Stok</p>
-                  <p className="mt-1 font-bold text-slate-800">
-                    {item.minStock}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {stockAlerts.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 md:col-span-2 xl:col-span-3">
-              Tidak ada produk dengan stok menipis.
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-2xl bg-white p-5 shadow-sm">
-        <div className="mb-5">
-          <h3 className="text-lg font-bold text-slate-800">
-            Barang Mendekati Kedaluwarsa
-          </h3>
-          <p className="text-sm text-slate-500">
-            Produk yang tanggal kedaluwarsanya kurang dari atau sama dengan 60
-            hari.
-          </p>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {expiredAlerts.map((item) => (
-            <div key={item.id} className="rounded-2xl bg-orange-50 p-4">
-              <p className="font-bold text-orange-700">{item.name}</p>
-              <p className="mt-1 text-sm text-orange-600">
-                {item.branch} • Exp: {formatDateOnly(item.expiredDate)}
-              </p>
-              <span className="mt-2 inline-block rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700">
-                {item.daysLeft} hari lagi
-              </span>
-            </div>
-          ))}
-
-          {expiredAlerts.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 md:col-span-2 xl:col-span-3">
-              Tidak ada barang yang mendekati kedaluwarsa.
-            </div>
-          )}
-        </div>
+        </Card>
       </div>
     </div>
   );

@@ -1,1488 +1,909 @@
 import { useEffect, useMemo, useState } from "react";
-
-import PageHeader from "../../components/PageHeader";
 import {
-  createUser,
-  deleteUser,
-  getSettingsApi,
-  getUsers,
-  updateSettingsApi,
-  updateUser,
-} from "../../services/api";
+  BadgeCheck,
+  BellRing,
+  Boxes,
+  Building2,
+  CheckCircle2,
+  Clock3,
+  CreditCard,
+  LayoutDashboard,
+  Printer,
+  ReceiptText,
+  RotateCcw,
+  Save,
+  Settings,
+  ShieldCheck,
+  ShoppingCart,
+  Store,
+  ToggleLeft,
+  ToggleRight,
+  Trash2,
+  WalletCards,
+} from "lucide-react";
 
-const initialStoreProfile = {
-  storeName: "Nikky Frozen",
-  address: "Klaten, Jawa Tengah",
-  phone: "0272-000000",
-  whatsapp: "081234567890",
-  npwp: "",
-  logoName: "",
+const PERMISSION_STORAGE_KEY = "nikky_kasir_permissions";
+const STORE_SETTING_KEY = "nikky_store_settings";
+const STOCK_SETTING_KEY = "nikky_stock_settings";
+const TRANSACTION_SETTING_KEY = "nikky_transaction_settings";
+
+const defaultPermissions = [
+  {
+    id: "pos",
+    name: "Kasir / POS",
+    description: "Kasir dapat membuat transaksi penjualan.",
+    icon: ShoppingCart,
+    kasirAccess: true,
+    recommended: true,
+  },
+  {
+    id: "shift",
+    name: "Shift Saya",
+    description: "Kasir dapat membuka dan menutup shift kerja.",
+    icon: Clock3,
+    kasirAccess: true,
+    recommended: true,
+  },
+  {
+    id: "transaksi",
+    name: "Riwayat Transaksi",
+    description: "Kasir dapat melihat riwayat transaksi kasir.",
+    icon: ReceiptText,
+    kasirAccess: true,
+    recommended: true,
+  },
+  {
+    id: "barang",
+    name: "Barang & Stok",
+    description: "Kasir dapat melihat monitoring stok produk.",
+    icon: Boxes,
+    kasirAccess: false,
+    recommended: false,
+  },
+  {
+    id: "laporan",
+    name: "Laporan",
+    description: "Kasir dapat melihat laporan penjualan.",
+    icon: LayoutDashboard,
+    kasirAccess: false,
+    recommended: false,
+  },
+  {
+    id: "pengeluaran",
+    name: "Pengeluaran",
+    description: "Kasir dapat membuka data pengeluaran.",
+    icon: WalletCards,
+    kasirAccess: false,
+    recommended: false,
+  },
+  {
+    id: "pengaturan",
+    name: "Pengaturan",
+    description: "Kasir dapat membuka halaman pengaturan sistem.",
+    icon: Settings,
+    kasirAccess: false,
+    recommended: false,
+  },
+];
+
+const defaultStoreSettings = {
+  storeName: "Nikky Frozen Food",
+  ownerName: "Owner",
+  branchName: "Cabang 1",
+  phone: "08xxxxxxxxxx",
+  address: "Alamat toko belum diatur",
+  footerReceipt: "Terima kasih sudah berbelanja.",
 };
 
-const initialReceiptSetting = {
-  ppnActive: true,
-  ppnRate: 11,
-  maxDiscount: 10,
-  roundingType: "Tidak ada pembulatan",
-  invoiceFormat: "INV-{YYYY}{MM}{DD}-{0000}",
-  resetNumber: "Reset setiap hari",
-  paperSize: "Thermal 80mm",
-  margin: 5,
-  autoPrint: true,
-  showCashierName: true,
-  showBranchName: true,
-  footerNote: "Terima kasih telah berbelanja di Nikky Frozen.",
+const defaultStockSettings = {
+  defaultMinStock: 5,
+  expiryWarningDays: 30,
+  showWarehouseMap: true,
+  lowStockAlert: true,
+  expiredAlert: true,
 };
 
-const initialUserForm = {
-  name: "",
-  username: "",
-  password: "",
-  branch_id: 1,
-  shift_name: "Shift Pagi",
-  phone: "",
-  status: "Aktif",
+const defaultTransactionSettings = {
+  allowCash: true,
+  allowQris: true,
+  allowTransfer: true,
+  allowDiscount: true,
+  allowVoid: false,
+  printReceipt: true,
 };
 
-function getBranchNameById(branchId) {
-  if (Number(branchId) === 1) return "Cabang 1";
-  if (Number(branchId) === 2) return "Cabang 2";
+const tabs = [
+  { id: "profil", label: "Profil Toko", icon: Store },
+  { id: "akses", label: "Akses Kasir", icon: ShieldCheck },
+  { id: "stok", label: "Stok & Expired", icon: Boxes },
+  { id: "transaksi", label: "Transaksi", icon: CreditCard },
+  { id: "struk", label: "Struk", icon: Printer },
+];
 
-  return "Semua Cabang";
+function readJsonStorage(key, fallback) {
+  const savedValue = localStorage.getItem(key);
+
+  if (!savedValue) return fallback;
+
+  try {
+    return {
+      ...fallback,
+      ...JSON.parse(savedValue),
+    };
+  } catch {
+    return fallback;
+  }
 }
 
-function getBranchIdByName(branchName) {
-  if (branchName === "Cabang 1") return 1;
-  if (branchName === "Cabang 2") return 2;
+function mergePermissions(savedPermissions) {
+  if (!Array.isArray(savedPermissions)) return defaultPermissions;
 
-  return null;
-}
+  return defaultPermissions.map((defaultPermission) => {
+    const foundPermission = savedPermissions.find(
+      (permission) => permission.id === defaultPermission.id,
+    );
 
-function formatDateTime(dateString) {
-  if (!dateString) return "-";
+    if (!foundPermission) return defaultPermission;
 
-  const date = new Date(dateString);
-
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return date.toLocaleString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    return {
+      ...defaultPermission,
+      kasirAccess: Boolean(foundPermission.kasirAccess),
+    };
   });
 }
 
-function normalizeUser(user) {
-  const isOwner = user.role === "owner";
+function readPermissions() {
+  const savedPermissions = localStorage.getItem(PERMISSION_STORAGE_KEY);
 
-  return {
-    id: user.id,
-    name: user.name,
-    username: user.username,
-    email: user.email,
-    role: user.role,
-    roleLabel: isOwner ? "Owner" : "Kasir",
-    branch_id: user.branch_id,
-    branch: isOwner
-      ? "Semua Cabang"
-      : user.branch?.name || getBranchNameById(user.branch_id),
-    shift: user.shift_name || (isOwner ? "Monitoring Owner" : "-"),
-    phone: user.phone || "-",
-    status: user.status || "Aktif",
-    lastLogin: user.last_login_at,
-  };
+  if (!savedPermissions) return defaultPermissions;
+
+  try {
+    return mergePermissions(JSON.parse(savedPermissions));
+  } catch {
+    return defaultPermissions;
+  }
 }
 
-function normalizeReceiptSetting(data) {
-  return {
-    ...initialReceiptSetting,
-    ...data,
-    ppnActive: Boolean(data?.ppnActive),
-    ppnRate: Number(data?.ppnRate ?? initialReceiptSetting.ppnRate),
-    maxDiscount: Number(data?.maxDiscount ?? initialReceiptSetting.maxDiscount),
-    margin: Number(data?.margin ?? initialReceiptSetting.margin),
-    autoPrint: Boolean(data?.autoPrint),
-    showCashierName: Boolean(data?.showCashierName),
-    showBranchName: Boolean(data?.showBranchName),
-  };
+function writePermissions(permissions) {
+  const payload = permissions.map((permission) => ({
+    id: permission.id,
+    name: permission.name,
+    kasirAccess: Boolean(permission.kasirAccess),
+  }));
+
+  localStorage.setItem(PERMISSION_STORAGE_KEY, JSON.stringify(payload));
+  window.dispatchEvent(new Event("nikky_permissions_updated"));
+}
+
+function Card({ children, className = "" }) {
+  return (
+    <div
+      className={`rounded-[24px] border border-gray-200 bg-white shadow-sm ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SectionTitle({ icon: Icon, title, description }) {
+  return (
+    <div className="mb-5 flex items-start gap-3">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-[#0B7FC3]">
+        <Icon className="h-5 w-5" />
+      </div>
+
+      <div>
+        <h2 className="text-xl font-black text-gray-950">{title}</h2>
+        <p className="mt-1 text-sm font-medium leading-relaxed text-gray-500">
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-black text-gray-700">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function TextInput(props) {
+  return (
+    <input
+      {...props}
+      className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-800 outline-none transition focus:border-[#0B7FC3] focus:bg-white focus:ring-4 focus:ring-sky-100"
+    />
+  );
+}
+
+function TextArea(props) {
+  return (
+    <textarea
+      {...props}
+      className="min-h-[110px] w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-800 outline-none transition focus:border-[#0B7FC3] focus:bg-white focus:ring-4 focus:ring-sky-100"
+    />
+  );
+}
+
+function ToggleRow({ title, description, checked, onChange, icon: Icon }) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      className={`flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition ${
+        checked
+          ? "border-sky-200 bg-sky-50"
+          : "border-gray-200 bg-white hover:bg-gray-50"
+      }`}
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
+            checked
+              ? "bg-white text-[#0B7FC3] ring-1 ring-sky-100"
+              : "bg-gray-100 text-gray-500"
+          }`}
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+
+        <div>
+          <p className="font-black text-gray-950">{title}</p>
+          <p className="mt-1 text-sm font-medium leading-relaxed text-gray-500">
+            {description}
+          </p>
+        </div>
+      </div>
+
+      <div
+        className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
+          checked ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"
+        }`}
+      >
+        {checked ? "Aktif" : "Nonaktif"}
+      </div>
+    </button>
+  );
+}
+
+function PermissionCard({ permission, onToggle }) {
+  const Icon = permission.icon;
+  const isActive = permission.kasirAccess;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(permission.id)}
+      className={`rounded-[22px] border p-4 text-left transition ${
+        isActive
+          ? "border-sky-200 bg-sky-50 shadow-sm"
+          : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+      }`}
+    >
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
+            isActive
+              ? "bg-white text-[#0B7FC3] ring-1 ring-sky-100"
+              : "bg-gray-100 text-gray-500"
+          }`}
+        >
+          <Icon className="h-6 w-6" />
+        </div>
+
+        <div
+          className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black ${
+            isActive
+              ? "bg-green-50 text-green-700 ring-1 ring-green-100"
+              : "bg-gray-100 text-gray-500"
+          }`}
+        >
+          {isActive ? (
+            <ToggleRight className="h-4 w-4" />
+          ) : (
+            <ToggleLeft className="h-4 w-4" />
+          )}
+          {isActive ? "Aktif" : "Nonaktif"}
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center gap-2">
+          <h3 className="font-black text-gray-950">{permission.name}</h3>
+
+          {permission.recommended && (
+            <span className="rounded-full bg-green-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-green-700">
+              Utama
+            </span>
+          )}
+        </div>
+
+        <p className="mt-2 text-sm font-medium leading-relaxed text-gray-500">
+          {permission.description}
+        </p>
+      </div>
+    </button>
+  );
 }
 
 function PengaturanPage() {
   const [activeTab, setActiveTab] = useState("profil");
-
-  const [storeProfile, setStoreProfile] = useState(initialStoreProfile);
-  const [receiptSetting, setReceiptSetting] = useState(initialReceiptSetting);
-  const [users, setUsers] = useState([]);
-
-  const [searchKeyword, setSearchKeyword] = useState("");
-  const [selectedBranch, setSelectedBranch] = useState("Semua");
-  const [selectedStatus, setSelectedStatus] = useState("Semua");
-
-  const [showUserModal, setShowUserModal] = useState(false);
-  const [modalMode, setModalMode] = useState("add");
-  const [editingUser, setEditingUser] = useState(null);
-  const [userForm, setUserForm] = useState(initialUserForm);
-
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-
-  const [isLoadingSettings, setIsLoadingSettings] = useState(false);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const fetchSettings = async () => {
-    try {
-      setIsLoadingSettings(true);
-      setErrorMessage("");
-
-      const settingsData = await getSettingsApi();
-
-      const profileData = {
-        ...initialStoreProfile,
-        ...(settingsData.store_profile || {}),
-      };
-
-      const receiptData = normalizeReceiptSetting(
-        settingsData.receipt_setting || {}
-      );
-
-      setStoreProfile(profileData);
-      setReceiptSetting(receiptData);
-
-      localStorage.setItem("nikky_store_profile", JSON.stringify(profileData));
-      localStorage.setItem("nikky_receipt_setting", JSON.stringify(receiptData));
-    } catch (error) {
-      setErrorMessage(
-        error.message ||
-          "Gagal mengambil pengaturan dari backend. Pastikan Laravel server berjalan."
-      );
-    } finally {
-      setIsLoadingSettings(false);
-    }
-  };
-
-  const fetchUsers = async () => {
-    try {
-      setIsLoadingUsers(true);
-      setErrorMessage("");
-
-      const userData = await getUsers();
-      setUsers(userData.map(normalizeUser));
-    } catch (error) {
-      setErrorMessage(
-        error.message ||
-          "Gagal mengambil data pengguna dari backend."
-      );
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  };
+  const [permissions, setPermissions] = useState(defaultPermissions);
+  const [storeSettings, setStoreSettings] = useState(defaultStoreSettings);
+  const [stockSettings, setStockSettings] = useState(defaultStockSettings);
+  const [transactionSettings, setTransactionSettings] = useState(
+    defaultTransactionSettings,
+  );
+  const [isSaved, setIsSaved] = useState(false);
+  const [savedAt, setSavedAt] = useState("");
 
   useEffect(() => {
-    fetchSettings();
-    fetchUsers();
+    setPermissions(readPermissions());
+    setStoreSettings(readJsonStorage(STORE_SETTING_KEY, defaultStoreSettings));
+    setStockSettings(readJsonStorage(STOCK_SETTING_KEY, defaultStockSettings));
+    setTransactionSettings(
+      readJsonStorage(TRANSACTION_SETTING_KEY, defaultTransactionSettings),
+    );
   }, []);
 
-  const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
-      const keyword = searchKeyword.toLowerCase();
+  const activePermissionCount = useMemo(() => {
+    return permissions.filter((permission) => permission.kasirAccess).length;
+  }, [permissions]);
 
-      const matchSearch =
-        user.name?.toLowerCase().includes(keyword) ||
-        user.username?.toLowerCase().includes(keyword) ||
-        user.roleLabel?.toLowerCase().includes(keyword) ||
-        user.branch?.toLowerCase().includes(keyword);
-
-      const matchBranch =
-        selectedBranch === "Semua" || user.branch === selectedBranch;
-
-      const matchStatus =
-        selectedStatus === "Semua" || user.status === selectedStatus;
-
-      return matchSearch && matchBranch && matchStatus;
-    });
-  }, [users, searchKeyword, selectedBranch, selectedStatus]);
-
-  const totalUsers = users.length;
-  const totalCashier = users.filter((user) => user.role === "kasir").length;
-  const activeCashier = users.filter(
-    (user) => user.role === "kasir" && user.status === "Aktif"
-  ).length;
-  const inactiveCashier = users.filter(
-    (user) => user.role === "kasir" && user.status === "Nonaktif"
-  ).length;
-
-  const showSuccess = (message) => {
-    setSuccessMessage(message);
-
-    setTimeout(() => {
-      setSuccessMessage("");
-    }, 2500);
-  };
-
-  const handleProfileChange = (event) => {
-    const { name, value } = event.target;
-
-    setStoreProfile((prevData) => ({
-      ...prevData,
-      [name]: value,
-    }));
-  };
-
-  const handleReceiptChange = (event) => {
-    const { name, value } = event.target;
-
-    setReceiptSetting((prevData) => ({
-      ...prevData,
-      [name]: ["ppnRate", "maxDiscount", "margin"].includes(name)
-        ? Number(value)
-        : value,
-    }));
-  };
-
-  const handleToggleReceipt = (name) => {
-    setReceiptSetting((prevData) => ({
-      ...prevData,
-      [name]: !prevData[name],
-    }));
-  };
-
-  const handleLogoUpload = (event) => {
-    const file = event.target.files[0];
-
-    if (!file) return;
-
-    setStoreProfile((prevData) => ({
-      ...prevData,
-      logoName: file.name,
-    }));
-  };
-
-  const getSettingsPayload = (profile = storeProfile, receipt = receiptSetting) => {
-    return {
-      store_profile: {
-        ...profile,
-        storeName: profile.storeName,
-        address: profile.address,
-        phone: profile.phone,
-        whatsapp: profile.whatsapp || "",
-        npwp: profile.npwp || "",
-        logoName: profile.logoName || "",
-      },
-      receipt_setting: {
-        ...receipt,
-        ppnActive: Boolean(receipt.ppnActive),
-        ppnRate: Number(receipt.ppnRate || 0),
-        maxDiscount: Number(receipt.maxDiscount || 0),
-        roundingType: receipt.roundingType,
-        invoiceFormat: receipt.invoiceFormat,
-        resetNumber: receipt.resetNumber,
-        paperSize: receipt.paperSize,
-        margin: Number(receipt.margin || 0),
-        autoPrint: Boolean(receipt.autoPrint),
-        showCashierName: Boolean(receipt.showCashierName),
-        showBranchName: Boolean(receipt.showBranchName),
-        footerNote: receipt.footerNote || "",
-      },
-    };
-  };
-
-  const saveSettings = async (profile = storeProfile, receipt = receiptSetting) => {
-    const payload = getSettingsPayload(profile, receipt);
-
-    const updatedSettings = await updateSettingsApi(payload);
-
-    const updatedProfile = {
-      ...initialStoreProfile,
-      ...(updatedSettings.store_profile || payload.store_profile),
-    };
-
-    const updatedReceipt = normalizeReceiptSetting(
-      updatedSettings.receipt_setting || payload.receipt_setting
+  const saveAllSettings = () => {
+    writePermissions(permissions);
+    localStorage.setItem(STORE_SETTING_KEY, JSON.stringify(storeSettings));
+    localStorage.setItem(STOCK_SETTING_KEY, JSON.stringify(stockSettings));
+    localStorage.setItem(
+      TRANSACTION_SETTING_KEY,
+      JSON.stringify(transactionSettings),
     );
 
-    setStoreProfile(updatedProfile);
-    setReceiptSetting(updatedReceipt);
+    setSavedAt(
+      new Date().toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+    );
+    setIsSaved(true);
 
-    localStorage.setItem("nikky_store_profile", JSON.stringify(updatedProfile));
-    localStorage.setItem("nikky_receipt_setting", JSON.stringify(updatedReceipt));
+    setTimeout(() => setIsSaved(false), 4000);
   };
 
-  const saveProfile = async () => {
-    if (!storeProfile.storeName || !storeProfile.address || !storeProfile.phone) {
-      alert("Nama toko, alamat, dan nomor telepon wajib diisi.");
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      setErrorMessage("");
-
-      await saveSettings(storeProfile, receiptSetting);
-
-      showSuccess("Profil toko berhasil disimpan ke backend.");
-    } catch (error) {
-      alert(error.message || "Gagal menyimpan profil toko.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const saveReceiptSetting = async () => {
-    if (Number(receiptSetting.ppnRate) < 0) {
-      alert("PPN tidak boleh bernilai negatif.");
-      return;
-    }
-
-    if (Number(receiptSetting.maxDiscount) < 0) {
-      alert("Diskon maksimal tidak boleh bernilai negatif.");
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      setErrorMessage("");
-
-      await saveSettings(storeProfile, receiptSetting);
-
-      showSuccess("Pengaturan struk dan pajak berhasil disimpan ke backend.");
-    } catch (error) {
-      alert(error.message || "Gagal menyimpan pengaturan struk.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const resetProfile = async () => {
-    const confirmReset = confirm("Yakin ingin mereset profil toko?");
+  const resetAllSettings = () => {
+    const confirmReset = confirm(
+      "Yakin ingin mengembalikan semua pengaturan ke default?",
+    );
 
     if (!confirmReset) return;
 
-    try {
-      setIsSaving(true);
-      await saveSettings(initialStoreProfile, receiptSetting);
-      showSuccess("Profil toko berhasil direset.");
-    } catch (error) {
-      alert(error.message || "Gagal reset profil toko.");
-    } finally {
-      setIsSaving(false);
-    }
+    setPermissions(defaultPermissions);
+    setStoreSettings(defaultStoreSettings);
+    setStockSettings(defaultStockSettings);
+    setTransactionSettings(defaultTransactionSettings);
+    setIsSaved(false);
   };
 
-  const resetReceiptSetting = async () => {
-    const confirmReset = confirm("Yakin ingin mereset pengaturan struk?");
+  const clearLocalData = () => {
+    const confirmClear = confirm(
+      "Yakin ingin menghapus data pengaturan lokal? Data login tidak ikut dihapus.",
+    );
 
-    if (!confirmReset) return;
+    if (!confirmClear) return;
 
-    try {
-      setIsSaving(true);
-      await saveSettings(storeProfile, initialReceiptSetting);
-      showSuccess("Pengaturan struk berhasil direset.");
-    } catch (error) {
-      alert(error.message || "Gagal reset pengaturan struk.");
-    } finally {
-      setIsSaving(false);
-    }
+    localStorage.removeItem(PERMISSION_STORAGE_KEY);
+    localStorage.removeItem(STORE_SETTING_KEY);
+    localStorage.removeItem(STOCK_SETTING_KEY);
+    localStorage.removeItem(TRANSACTION_SETTING_KEY);
+
+    setPermissions(defaultPermissions);
+    setStoreSettings(defaultStoreSettings);
+    setStockSettings(defaultStockSettings);
+    setTransactionSettings(defaultTransactionSettings);
+    window.dispatchEvent(new Event("nikky_permissions_updated"));
   };
 
-  const openAddUserModal = () => {
-    setModalMode("add");
-    setEditingUser(null);
-    setUserForm(initialUserForm);
-    setShowUserModal(true);
+  const togglePermission = (permissionId) => {
+    setIsSaved(false);
+
+    setPermissions((currentPermissions) =>
+      currentPermissions.map((permission) => {
+        if (permission.id !== permissionId) return permission;
+
+        return {
+          ...permission,
+          kasirAccess: !permission.kasirAccess,
+        };
+      }),
+    );
   };
 
-  const openEditUserModal = (user) => {
-    if (user.role === "owner") {
-      showSuccess("Data owner tidak dapat diedit melalui halaman ini.");
-      return;
-    }
+  const setRecommendedPermission = () => {
+    setIsSaved(false);
 
-    setModalMode("edit");
-    setEditingUser(user);
-    setUserForm({
-      name: user.name,
-      username: user.username,
-      password: "",
-      branch_id: user.branch_id || 1,
-      shift_name: user.shift,
-      phone: user.phone === "-" ? "" : user.phone,
-      status: user.status,
-    });
-    setShowUserModal(true);
+    setPermissions((currentPermissions) =>
+      currentPermissions.map((permission) => ({
+        ...permission,
+        kasirAccess: Boolean(permission.recommended),
+      })),
+    );
   };
 
-  const closeUserModal = () => {
-    setShowUserModal(false);
-    setModalMode("add");
-    setEditingUser(null);
-    setUserForm(initialUserForm);
+  const enableAllPermission = () => {
+    setIsSaved(false);
+
+    setPermissions((currentPermissions) =>
+      currentPermissions.map((permission) => ({
+        ...permission,
+        kasirAccess: true,
+      })),
+    );
   };
 
-  const handleUserFormChange = (event) => {
-    const { name, value } = event.target;
-
-    setUserForm((prevData) => ({
-      ...prevData,
-      [name]: name === "branch_id" ? Number(value) : value,
+  const updateStoreSetting = (key, value) => {
+    setIsSaved(false);
+    setStoreSettings((currentSettings) => ({
+      ...currentSettings,
+      [key]: value,
     }));
   };
 
-  const getUserPayload = () => {
-    const payload = {
-      name: userForm.name,
-      username: userForm.username,
-      email: `${userForm.username}@nikkyfrozen.test`,
-      role: "kasir",
-      branch_id: Number(userForm.branch_id),
-      shift_name: userForm.shift_name,
-      phone: userForm.phone,
-      status: userForm.status,
-    };
-
-    if (userForm.password.trim()) {
-      payload.password = userForm.password;
-    }
-
-    return payload;
+  const updateStockSetting = (key, value) => {
+    setIsSaved(false);
+    setStockSettings((currentSettings) => ({
+      ...currentSettings,
+      [key]: value,
+    }));
   };
 
-  const handleUserSubmit = async (event) => {
-    event.preventDefault();
-
-    if (!userForm.name || !userForm.username || !userForm.phone) {
-      alert("Lengkapi nama, username, dan nomor telepon.");
-      return;
-    }
-
-    if (modalMode === "add" && !userForm.password) {
-      alert("Password wajib diisi untuk kasir baru.");
-      return;
-    }
-
-    if (userForm.password && userForm.password.length < 6) {
-      alert("Password minimal 6 karakter.");
-      return;
-    }
-
-    if (userForm.username.toLowerCase() === "owner") {
-      alert("Username owner tidak boleh digunakan untuk kasir.");
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      setErrorMessage("");
-
-      const payload = getUserPayload();
-
-      if (modalMode === "edit") {
-        await updateUser(editingUser.id, payload);
-        showSuccess("Data kasir berhasil diperbarui ke backend.");
-      } else {
-        await createUser(payload);
-        showSuccess("Data kasir berhasil ditambahkan ke backend.");
-      }
-
-      closeUserModal();
-      await fetchUsers();
-    } catch (error) {
-      alert(error.message || "Gagal menyimpan data pengguna.");
-    } finally {
-      setIsSaving(false);
-    }
+  const updateTransactionSetting = (key, value) => {
+    setIsSaved(false);
+    setTransactionSettings((currentSettings) => ({
+      ...currentSettings,
+      [key]: value,
+    }));
   };
-
-  const handleDeleteUser = async (user) => {
-    if (user.role === "owner") {
-      showSuccess("Data owner tidak dapat dihapus.");
-      return;
-    }
-
-    const confirmDelete = confirm(`Yakin ingin menghapus ${user.name}?`);
-
-    if (!confirmDelete) return;
-
-    try {
-      setIsSaving(true);
-      await deleteUser(user.id);
-      await fetchUsers();
-      showSuccess("Data pengguna berhasil dihapus dari backend.");
-    } catch (error) {
-      alert(error.message || "Gagal menghapus pengguna.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleToggleUserStatus = async (user) => {
-    if (user.role === "owner") {
-      showSuccess("Status owner tidak dapat dinonaktifkan.");
-      return;
-    }
-
-    const newStatus = user.status === "Aktif" ? "Nonaktif" : "Aktif";
-
-    const confirmUpdate = confirm(
-      `Yakin ingin mengubah status ${user.name} menjadi ${newStatus}?`
-    );
-
-    if (!confirmUpdate) return;
-
-    try {
-      setIsSaving(true);
-
-      await updateUser(user.id, {
-        name: user.name,
-        username: user.username,
-        email: user.email || `${user.username}@nikkyfrozen.test`,
-        role: "kasir",
-        branch_id: user.branch_id,
-        shift_name: user.shift,
-        phone: user.phone === "-" ? "" : user.phone,
-        status: newStatus,
-      });
-
-      await fetchUsers();
-
-      showSuccess(`Status pengguna berhasil diubah menjadi ${newStatus}.`);
-    } catch (error) {
-      alert(error.message || "Gagal mengubah status pengguna.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const tabs = [
-    { id: "profil", name: "Profil Toko", icon: "🏪" },
-    { id: "struk", name: "Struk & Pajak", icon: "🧾" },
-    { id: "pengguna", name: "Pengguna", icon: "👥" },
-  ];
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <PageHeader
-        title="Pengaturan Toko"
-        description="Konfigurasi profil toko, struk, pajak, printer, dan data pengguna sistem dari backend."
-      />
+    <div className="min-h-screen bg-[#F3F4F6] px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mb-5 grid gap-4 md:grid-cols-4">
+        <Card className="p-5">
+          <p className="text-sm font-semibold text-gray-500">Profil Toko</p>
+          <p className="mt-2 truncate text-xl font-black text-gray-950">
+            {storeSettings.storeName}
+          </p>
+          <p className="mt-1 text-xs font-semibold text-gray-400">
+            {storeSettings.branchName}
+          </p>
+        </Card>
 
-      {successMessage && (
-        <div className="mb-5 rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-sm font-semibold text-green-700">
-          {successMessage}
-        </div>
-      )}
+        <Card className="p-5">
+          <p className="text-sm font-semibold text-gray-500">Akses Kasir</p>
+          <p className="mt-2 text-3xl font-black text-[#0B7FC3]">
+            {activePermissionCount}
+          </p>
+          <p className="mt-1 text-xs font-semibold text-gray-400">
+            Menu aktif untuk kasir
+          </p>
+        </Card>
 
-      {errorMessage && (
-        <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
-          {errorMessage}
-        </div>
-      )}
+        <Card className="p-5">
+          <p className="text-sm font-semibold text-gray-500">Peringatan Expired</p>
+          <p className="mt-2 text-3xl font-black text-orange-600">
+            {stockSettings.expiryWarningDays}
+          </p>
+          <p className="mt-1 text-xs font-semibold text-gray-400">
+            Hari sebelum expired
+          </p>
+        </Card>
 
-      {(isLoadingSettings || isLoadingUsers || isSaving) && (
-        <div className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-700">
-          {isSaving
-            ? "Menyimpan data ke backend..."
-            : "Mengambil data dari backend..."}
-        </div>
-      )}
+        <Card className="p-5">
+          <p className="text-sm font-semibold text-gray-500">Pembayaran</p>
+          <p className="mt-2 text-3xl font-black text-green-600">
+            {
+              [
+                transactionSettings.allowCash,
+                transactionSettings.allowQris,
+                transactionSettings.allowTransfer,
+              ].filter(Boolean).length
+            }
+          </p>
+          <p className="mt-1 text-xs font-semibold text-gray-400">
+            Metode aktif
+          </p>
+        </Card>
+      </div>
 
-      <div className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="mb-6 flex flex-wrap gap-3 rounded-2xl bg-slate-50 p-2">
-          {tabs.map((tab) => (
+      <Card className="mb-5 p-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex gap-2 overflow-x-auto">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex shrink-0 items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                    isActive
+                      ? "bg-[#0B7FC3] text-white shadow-sm"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
             <button
-              key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-bold transition ${
-                activeTab === tab.id
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-white"
-              }`}
+              onClick={resetAllSettings}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-gray-100 px-4 py-3 text-sm font-black text-gray-700 transition hover:bg-gray-200"
             >
-              <span>{tab.icon}</span>
-              <span>{tab.name}</span>
+              <RotateCcw className="h-4 w-4" />
+              Reset
             </button>
-          ))}
+
+            <button
+              type="button"
+              onClick={saveAllSettings}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-[#0B7FC3] px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#096EA8]"
+            >
+              <Save className="h-4 w-4" />
+              Simpan Semua
+            </button>
+          </div>
         </div>
 
-        {activeTab === "profil" && (
-          <div className="grid gap-5 xl:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 xl:col-span-2">
-              <h3 className="mb-5 text-lg font-bold text-slate-800">
-                Informasi Toko
-              </h3>
-
-              <div className="space-y-5">
-                <InputField
-                  label="Nama toko"
-                  required
-                  name="storeName"
-                  value={storeProfile.storeName}
-                  onChange={handleProfileChange}
-                  placeholder="Contoh: Nikky Frozen"
-                />
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Alamat lengkap <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    name="address"
-                    value={storeProfile.address}
-                    onChange={handleProfileChange}
-                    placeholder="Contoh: Jl. Merdeka, Klaten"
-                    rows="4"
-                    className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <InputField
-                    label="Nomor telepon"
-                    required
-                    name="phone"
-                    value={storeProfile.phone}
-                    onChange={handleProfileChange}
-                    placeholder="+62"
-                  />
-
-                  <InputField
-                    label="Nomor WhatsApp"
-                    name="whatsapp"
-                    value={storeProfile.whatsapp}
-                    onChange={handleProfileChange}
-                    placeholder="+62"
-                  />
-                </div>
-
-                <InputField
-                  label="NPWP"
-                  name="npwp"
-                  value={storeProfile.npwp}
-                  onChange={handleProfileChange}
-                  placeholder="Contoh: 01.000.000.0-000.000"
-                />
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Logo toko
-                  </label>
-
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                    <label className="flex h-32 w-32 cursor-pointer flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-center text-sm text-slate-400 hover:bg-slate-100">
-                      <span className="text-3xl">📄</span>
-                      <span className="mt-2">Upload Logo</span>
-                      <input
-                        type="file"
-                        accept=".jpg,.jpeg,.png,.svg"
-                        onChange={handleLogoUpload}
-                        className="hidden"
-                      />
-                    </label>
-
-                    <div className="text-sm text-slate-400">
-                      <p>Format: JPG, PNG, atau SVG</p>
-                      <p>Untuk saat ini yang disimpan adalah nama file logo.</p>
-                      {storeProfile.logoName && (
-                        <p className="mt-2 font-semibold text-blue-600">
-                          File dipilih: {storeProfile.logoName}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={saveProfile}
-                    disabled={isSaving}
-                    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:bg-slate-400"
-                  >
-                    Simpan Perubahan
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={resetProfile}
-                    disabled={isSaving}
-                    className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:text-slate-400"
-                  >
-                    Reset Profil
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <PreviewProfile storeProfile={storeProfile} />
+        {isSaved && (
+          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-sm font-bold text-green-700">
+            <CheckCircle2 className="h-5 w-5" />
+            Pengaturan berhasil disimpan
+            {savedAt ? ` pada ${savedAt}.` : "."}
           </div>
         )}
+      </Card>
 
-        {activeTab === "struk" && (
-          <div className="grid gap-5 xl:grid-cols-3">
-            <div className="space-y-5 xl:col-span-2">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                <h3 className="mb-5 text-lg font-bold text-slate-800">
-                  Pengaturan Pajak
-                </h3>
+      {activeTab === "profil" && (
+        <Card className="p-5">
+          <SectionTitle
+            icon={Building2}
+            title="Profil Toko"
+            description="Atur identitas toko yang akan dipakai di tampilan sistem dan struk."
+          />
 
-                <div className="space-y-5">
-                  <ToggleRow
-                    title="PPN Aktif"
-                    description="Aktifkan PPN secara default pada transaksi baru."
-                    active={receiptSetting.ppnActive}
-                    onClick={() => handleToggleReceipt("ppnActive")}
-                  />
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Nama Toko">
+              <TextInput
+                value={storeSettings.storeName}
+                onChange={(event) =>
+                  updateStoreSetting("storeName", event.target.value)
+                }
+              />
+            </Field>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <InputField
-                      type="number"
-                      label="PPN (%)"
-                      name="ppnRate"
-                      value={receiptSetting.ppnRate}
-                      onChange={handleReceiptChange}
-                      placeholder="Contoh: 11"
-                    />
+            <Field label="Nama Owner">
+              <TextInput
+                value={storeSettings.ownerName}
+                onChange={(event) =>
+                  updateStoreSetting("ownerName", event.target.value)
+                }
+              />
+            </Field>
 
-                    <InputField
-                      type="number"
-                      label="Diskon Maksimal (%)"
-                      name="maxDiscount"
-                      value={receiptSetting.maxDiscount}
-                      onChange={handleReceiptChange}
-                      placeholder="Contoh: 10"
-                    />
-                  </div>
+            <Field label="Cabang Aktif">
+              <TextInput
+                value={storeSettings.branchName}
+                onChange={(event) =>
+                  updateStoreSetting("branchName", event.target.value)
+                }
+              />
+            </Field>
 
-                  <SelectField
-                    label="Pembulatan Harga"
-                    name="roundingType"
-                    value={receiptSetting.roundingType}
-                    onChange={handleReceiptChange}
-                    options={[
-                      "Tidak ada pembulatan",
-                      "Bulatkan ke atas",
-                      "Bulatkan ke bawah",
-                      "Bulatkan ke kelipatan 500",
-                      "Bulatkan ke kelipatan 1000",
-                    ]}
-                  />
-                </div>
-              </div>
+            <Field label="Nomor Telepon">
+              <TextInput
+                value={storeSettings.phone}
+                onChange={(event) =>
+                  updateStoreSetting("phone", event.target.value)
+                }
+              />
+            </Field>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                <h3 className="mb-5 text-lg font-bold text-slate-800">
-                  Nomor Dokumen
-                </h3>
-
-                <div className="space-y-5">
-                  <InputField
-                    label="Format Nomor Transaksi"
-                    name="invoiceFormat"
-                    value={receiptSetting.invoiceFormat}
-                    onChange={handleReceiptChange}
-                    placeholder="INV-{YYYY}{MM}{DD}-{0000}"
-                  />
-
-                  <SelectField
-                    label="Reset Nomor Urut"
-                    name="resetNumber"
-                    value={receiptSetting.resetNumber}
-                    onChange={handleReceiptChange}
-                    options={[
-                      "Reset setiap hari",
-                      "Reset setiap bulan",
-                      "Reset setiap tahun",
-                      "Tidak reset otomatis",
-                    ]}
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                <h3 className="mb-5 text-lg font-bold text-slate-800">
-                  Printer & Tampilan Struk
-                </h3>
-
-                <div className="space-y-5">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <SelectField
-                      label="Ukuran Kertas"
-                      name="paperSize"
-                      value={receiptSetting.paperSize}
-                      onChange={handleReceiptChange}
-                      options={["Thermal 58mm", "Thermal 80mm", "A4"]}
-                    />
-
-                    <InputField
-                      type="number"
-                      label="Margin (mm)"
-                      name="margin"
-                      value={receiptSetting.margin}
-                      onChange={handleReceiptChange}
-                      placeholder="Contoh: 5"
-                    />
-                  </div>
-
-                  <ToggleRow
-                    title="Cetak Otomatis"
-                    description="Cetak struk otomatis setelah pembayaran."
-                    active={receiptSetting.autoPrint}
-                    onClick={() => handleToggleReceipt("autoPrint")}
-                  />
-
-                  <ToggleRow
-                    title="Tampilkan Nama Kasir"
-                    description="Nama kasir akan tampil pada struk transaksi."
-                    active={receiptSetting.showCashierName}
-                    onClick={() => handleToggleReceipt("showCashierName")}
-                  />
-
-                  <ToggleRow
-                    title="Tampilkan Cabang"
-                    description="Cabang transaksi akan tampil pada struk."
-                    active={receiptSetting.showBranchName}
-                    onClick={() => handleToggleReceipt("showBranchName")}
-                  />
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Catatan Footer Struk
-                    </label>
-                    <textarea
-                      name="footerNote"
-                      value={receiptSetting.footerNote}
-                      onChange={handleReceiptChange}
-                      rows="3"
-                      className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={saveReceiptSetting}
-                      disabled={isSaving}
-                      className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:bg-slate-400"
-                    >
-                      Simpan Pengaturan Struk
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={resetReceiptSetting}
-                      disabled={isSaving}
-                      className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:text-slate-400"
-                    >
-                      Reset Struk
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => showSuccess("Tes cetak berhasil diproses.")}
-                      className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                    >
-                      Tes Cetak
-                    </button>
-                  </div>
-                </div>
-              </div>
+            <div className="md:col-span-2">
+              <Field label="Alamat Toko">
+                <TextArea
+                  value={storeSettings.address}
+                  onChange={(event) =>
+                    updateStoreSetting("address", event.target.value)
+                  }
+                />
+              </Field>
             </div>
+          </div>
+        </Card>
+      )}
 
-            <ReceiptPreview
-              storeProfile={storeProfile}
-              receiptSetting={receiptSetting}
+      {activeTab === "akses" && (
+        <Card className="p-5">
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <SectionTitle
+              icon={ShieldCheck}
+              title="Akses Menu Kasir"
+              description="Owner bisa memilih menu yang muncul di sidebar kasir."
+            />
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={setRecommendedPermission}
+                className="flex items-center justify-center gap-2 rounded-2xl bg-gray-100 px-4 py-3 text-sm font-black text-gray-700 transition hover:bg-gray-200"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Default Kasir
+              </button>
+
+              <button
+                type="button"
+                onClick={enableAllPermission}
+                className="flex items-center justify-center gap-2 rounded-2xl bg-sky-50 px-4 py-3 text-sm font-black text-[#0B7FC3] transition hover:bg-sky-100"
+              >
+                <BadgeCheck className="h-4 w-4" />
+                Aktifkan Semua
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {permissions.map((permission) => (
+              <PermissionCard
+                key={permission.id}
+                permission={permission}
+                onToggle={togglePermission}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {activeTab === "stok" && (
+        <Card className="p-5">
+          <SectionTitle
+            icon={Boxes}
+            title="Pengaturan Stok & Expired"
+            description="Atur batas minimum stok, peringatan expired, dan map lokasi penyimpanan."
+          />
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Field label="Default Minimum Stok">
+              <TextInput
+                type="number"
+                min="0"
+                value={stockSettings.defaultMinStock}
+                onChange={(event) =>
+                  updateStockSetting(
+                    "defaultMinStock",
+                    Number(event.target.value),
+                  )
+                }
+              />
+            </Field>
+
+            <Field label="Peringatan Expired Sebelum Berapa Hari">
+              <TextInput
+                type="number"
+                min="1"
+                value={stockSettings.expiryWarningDays}
+                onChange={(event) =>
+                  updateStockSetting(
+                    "expiryWarningDays",
+                    Number(event.target.value),
+                  )
+                }
+              />
+            </Field>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            <ToggleRow
+              title="Tampilkan Map Lokasi"
+              description="Menampilkan map freezer/lokasi penyimpanan di Monitoring Stok."
+              icon={Boxes}
+              checked={stockSettings.showWarehouseMap}
+              onChange={() =>
+                updateStockSetting(
+                  "showWarehouseMap",
+                  !stockSettings.showWarehouseMap,
+                )
+              }
+            />
+
+            <ToggleRow
+              title="Peringatan Stok Menipis"
+              description="Menandai produk yang stoknya sama atau di bawah minimum."
+              icon={BellRing}
+              checked={stockSettings.lowStockAlert}
+              onChange={() =>
+                updateStockSetting("lowStockAlert", !stockSettings.lowStockAlert)
+              }
+            />
+
+            <ToggleRow
+              title="Peringatan Expired"
+              description="Menandai produk expired atau mendekati expired."
+              icon={BellRing}
+              checked={stockSettings.expiredAlert}
+              onChange={() =>
+                updateStockSetting("expiredAlert", !stockSettings.expiredAlert)
+              }
             />
           </div>
-        )}
-
-        {activeTab === "pengguna" && (
-          <UserTab
-            users={users}
-            filteredUsers={filteredUsers}
-            totalUsers={totalUsers}
-            totalCashier={totalCashier}
-            activeCashier={activeCashier}
-            inactiveCashier={inactiveCashier}
-            searchKeyword={searchKeyword}
-            selectedBranch={selectedBranch}
-            selectedStatus={selectedStatus}
-            setSearchKeyword={setSearchKeyword}
-            setSelectedBranch={setSelectedBranch}
-            setSelectedStatus={setSelectedStatus}
-            openAddUserModal={openAddUserModal}
-            openEditUserModal={openEditUserModal}
-            handleDeleteUser={handleDeleteUser}
-            handleToggleUserStatus={handleToggleUserStatus}
-            fetchUsers={fetchUsers}
-          />
-        )}
-      </div>
-
-      {showUserModal && (
-        <UserModal
-          modalMode={modalMode}
-          userForm={userForm}
-          isSaving={isSaving}
-          onClose={closeUserModal}
-          onChange={handleUserFormChange}
-          onSubmit={handleUserSubmit}
-        />
+        </Card>
       )}
-    </div>
-  );
-}
 
-function InputField({
-  label,
-  name,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  required = false,
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-semibold text-slate-700">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      <input
-        type={type}
-        name={name}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-      />
-    </div>
-  );
-}
-
-function SelectField({ label, name, value, onChange, options }) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-semibold text-slate-700">
-        {label}
-      </label>
-      <select
-        name={name}
-        value={value}
-        onChange={onChange}
-        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function ToggleRow({ title, description, active, onClick }) {
-  return (
-    <div className="flex items-center justify-between rounded-xl bg-slate-50 p-4">
-      <div>
-        <p className="text-sm font-semibold text-slate-700">{title}</p>
-        <p className="text-xs text-slate-400">{description}</p>
-      </div>
-
-      <button
-        type="button"
-        onClick={onClick}
-        className={`relative inline-flex h-7 w-14 items-center rounded-full transition ${
-          active ? "bg-blue-600" : "bg-slate-300"
-        }`}
-      >
-        <span
-          className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
-            active ? "translate-x-8" : "translate-x-1"
-          }`}
-        />
-      </button>
-    </div>
-  );
-}
-
-function PreviewProfile({ storeProfile }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-      <h3 className="text-lg font-bold text-slate-800">Preview Profil</h3>
-
-      <div className="mt-5 rounded-2xl bg-white p-5 shadow-sm">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-xl font-bold text-white">
-          NF
-        </div>
-
-        <h4 className="text-xl font-bold text-slate-800">
-          {storeProfile.storeName || "Nama Toko"}
-        </h4>
-
-        <p className="mt-2 text-sm text-slate-500">
-          {storeProfile.address || "Alamat toko belum diisi"}
-        </p>
-
-        <div className="mt-4 space-y-2 text-sm">
-          <PreviewRow label="Telepon" value={storeProfile.phone || "-"} />
-          <PreviewRow label="WhatsApp" value={storeProfile.whatsapp || "-"} />
-          <PreviewRow label="NPWP" value={storeProfile.npwp || "-"} />
-          <PreviewRow label="Logo" value={storeProfile.logoName || "-"} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PreviewRow({ label, value }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <span className="text-slate-400">{label}</span>
-      <span className="font-semibold text-slate-700">{value}</span>
-    </div>
-  );
-}
-
-function ReceiptPreview({ storeProfile, receiptSetting }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-      <h3 className="text-lg font-bold text-slate-800">Preview Struk</h3>
-
-      <div className="mt-5 rounded-2xl bg-white p-5 font-mono text-sm shadow-sm">
-        <div className="text-center">
-          <h4 className="font-bold text-slate-800">
-            {storeProfile.storeName || "Nikky Frozen"}
-          </h4>
-          <p className="text-xs text-slate-500">
-            {storeProfile.address || "Alamat toko"}
-          </p>
-          <p className="text-xs text-slate-500">
-            Telp: {storeProfile.phone || "-"}
-          </p>
-        </div>
-
-        <div className="my-4 border-t border-dashed border-slate-300" />
-
-        <div className="space-y-1 text-xs text-slate-600">
-          <div className="flex justify-between">
-            <span>No</span>
-            <span>INV-20260601-0001</span>
-          </div>
-
-          {receiptSetting.showCashierName && (
-            <div className="flex justify-between">
-              <span>Kasir</span>
-              <span>Kasir Cabang 1</span>
-            </div>
-          )}
-
-          {receiptSetting.showBranchName && (
-            <div className="flex justify-between">
-              <span>Cabang</span>
-              <span>Cabang 1</span>
-            </div>
-          )}
-        </div>
-
-        <div className="my-4 border-t border-dashed border-slate-300" />
-
-        <div className="space-y-2 text-xs">
-          <div>
-            <p className="font-semibold">Chicken Nugget</p>
-            <div className="flex justify-between text-slate-500">
-              <span>1 x Rp28.000</span>
-              <span>Rp28.000</span>
-            </div>
-          </div>
-
-          <div>
-            <p className="font-semibold">Sosis Ayam</p>
-            <div className="flex justify-between text-slate-500">
-              <span>2 x Rp25.000</span>
-              <span>Rp50.000</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="my-4 border-t border-dashed border-slate-300" />
-
-        <div className="space-y-1 text-xs">
-          <div className="flex justify-between">
-            <span>Subtotal</span>
-            <span>Rp78.000</span>
-          </div>
-
-          {receiptSetting.ppnActive && (
-            <div className="flex justify-between">
-              <span>PPN {receiptSetting.ppnRate}%</span>
-              <span>Rp8.580</span>
-            </div>
-          )}
-
-          <div className="flex justify-between font-bold text-slate-800">
-            <span>Total</span>
-            <span>Rp86.580</span>
-          </div>
-        </div>
-
-        <div className="my-4 border-t border-dashed border-slate-300" />
-
-        <p className="text-center text-xs text-slate-500">
-          {receiptSetting.footerNote}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function UserTab({
-  users,
-  filteredUsers,
-  totalUsers,
-  totalCashier,
-  activeCashier,
-  inactiveCashier,
-  searchKeyword,
-  selectedBranch,
-  selectedStatus,
-  setSearchKeyword,
-  setSelectedBranch,
-  setSelectedStatus,
-  openAddUserModal,
-  openEditUserModal,
-  handleDeleteUser,
-  handleToggleUserStatus,
-  fetchUsers,
-}) {
-  return (
-    <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Total Pengguna" value={totalUsers} />
-        <SummaryCard
-          label="Total Kasir"
-          value={totalCashier}
-          valueClass="text-blue-600"
-        />
-        <SummaryCard
-          label="Kasir Aktif"
-          value={activeCashier}
-          valueClass="text-green-600"
-        />
-        <SummaryCard
-          label="Kasir Nonaktif"
-          value={inactiveCashier}
-          valueClass="text-red-600"
-        />
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-slate-800">Data Pengguna</h3>
-            <p className="text-sm text-slate-500">
-              Data owner dan kasir diambil dari tabel users backend.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={fetchUsers}
-              className="rounded-xl border border-green-200 bg-white px-5 py-3 text-sm font-bold text-green-700 hover:bg-green-50"
-            >
-              Refresh User
-            </button>
-
-            <button
-              type="button"
-              onClick={openAddUserModal}
-              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
-            >
-              + Tambah Kasir
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-5 grid gap-3 md:grid-cols-3">
-          <input
-            type="text"
-            value={searchKeyword}
-            onChange={(event) => setSearchKeyword(event.target.value)}
-            placeholder="Cari nama, username, role..."
-            className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+      {activeTab === "transaksi" && (
+        <Card className="p-5">
+          <SectionTitle
+            icon={CreditCard}
+            title="Pengaturan Transaksi"
+            description="Atur metode pembayaran dan batas aksi kasir saat transaksi."
           />
 
-          <select
-            value={selectedBranch}
-            onChange={(event) => setSelectedBranch(event.target.value)}
-            className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-          >
-            <option>Semua</option>
-            <option>Semua Cabang</option>
-            <option>Cabang 1</option>
-            <option>Cabang 2</option>
-          </select>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <ToggleRow
+              title="Pembayaran Tunai"
+              description="Aktifkan pembayaran menggunakan uang tunai."
+              icon={WalletCards}
+              checked={transactionSettings.allowCash}
+              onChange={() =>
+                updateTransactionSetting("allowCash", !transactionSettings.allowCash)
+              }
+            />
 
-          <select
-            value={selectedStatus}
-            onChange={(event) => setSelectedStatus(event.target.value)}
-            className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-          >
-            <option>Semua</option>
-            <option>Aktif</option>
-            <option>Nonaktif</option>
-          </select>
-        </div>
+            <ToggleRow
+              title="Pembayaran QRIS"
+              description="Aktifkan metode pembayaran QRIS."
+              icon={CreditCard}
+              checked={transactionSettings.allowQris}
+              onChange={() =>
+                updateTransactionSetting("allowQris", !transactionSettings.allowQris)
+              }
+            />
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1050px] border-collapse">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50 text-left text-sm text-slate-500">
-                <th className="px-4 py-4 font-semibold">Nama</th>
-                <th className="px-4 py-4 font-semibold">Username</th>
-                <th className="px-4 py-4 font-semibold">Role</th>
-                <th className="px-4 py-4 font-semibold">Cabang</th>
-                <th className="px-4 py-4 font-semibold">Shift</th>
-                <th className="px-4 py-4 font-semibold">Login Terakhir</th>
-                <th className="px-4 py-4 font-semibold">Status</th>
-                <th className="px-4 py-4 text-center font-semibold">Aksi</th>
-              </tr>
-            </thead>
+            <ToggleRow
+              title="Pembayaran Transfer"
+              description="Aktifkan metode pembayaran transfer bank."
+              icon={CreditCard}
+              checked={transactionSettings.allowTransfer}
+              onChange={() =>
+                updateTransactionSetting(
+                  "allowTransfer",
+                  !transactionSettings.allowTransfer,
+                )
+              }
+            />
 
-            <tbody>
-              {filteredUsers.map((user) => (
-                <tr
-                  key={`${user.role}-${user.username}`}
-                  className="border-b border-slate-100 text-sm hover:bg-slate-50"
-                >
-                  <td className="px-4 py-4 font-bold text-slate-800">
-                    {user.name}
-                  </td>
+            <ToggleRow
+              title="Diskon Transaksi"
+              description="Izinkan kasir memberi diskon saat pembayaran."
+              icon={ReceiptText}
+              checked={transactionSettings.allowDiscount}
+              onChange={() =>
+                updateTransactionSetting(
+                  "allowDiscount",
+                  !transactionSettings.allowDiscount,
+                )
+              }
+            />
 
-                  <td className="px-4 py-4 text-slate-600">
-                    @{user.username}
-                  </td>
+            <ToggleRow
+              title="Void / Batalkan Transaksi"
+              description="Batasi fitur pembatalan transaksi agar hanya owner yang bisa."
+              icon={ShieldCheck}
+              checked={transactionSettings.allowVoid}
+              onChange={() =>
+                updateTransactionSetting("allowVoid", !transactionSettings.allowVoid)
+              }
+            />
 
-                  <td className="px-4 py-4">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-bold ${
-                        user.role === "owner"
-                          ? "bg-purple-100 text-purple-700"
-                          : "bg-blue-100 text-blue-700"
-                      }`}
-                    >
-                      {user.roleLabel}
-                    </span>
-                  </td>
+            <ToggleRow
+              title="Cetak Struk"
+              description="Tampilkan opsi cetak struk setelah transaksi berhasil."
+              icon={Printer}
+              checked={transactionSettings.printReceipt}
+              onChange={() =>
+                updateTransactionSetting(
+                  "printReceipt",
+                  !transactionSettings.printReceipt,
+                )
+              }
+            />
+          </div>
+        </Card>
+      )}
 
-                  <td className="px-4 py-4 text-slate-600">{user.branch}</td>
-                  <td className="px-4 py-4 text-slate-600">{user.shift}</td>
-                  <td className="px-4 py-4 text-slate-600">
-                    {formatDateTime(user.lastLogin)}
-                  </td>
+      {activeTab === "struk" && (
+        <Card className="p-5">
+          <SectionTitle
+            icon={Printer}
+            title="Pengaturan Struk"
+            description="Atur teks tambahan yang tampil di bagian bawah struk."
+          />
 
-                  <td className="px-4 py-4">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleUserStatus(user)}
-                      className={`rounded-full px-3 py-1 text-xs font-bold ${
-                        user.status === "Aktif"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {user.status}
-                    </button>
-                  </td>
+          <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+            <Field label="Footer Struk">
+              <TextArea
+                value={storeSettings.footerReceipt}
+                onChange={(event) =>
+                  updateStoreSetting("footerReceipt", event.target.value)
+                }
+              />
+            </Field>
 
-                  <td className="px-4 py-4 text-center">
-                    <div className="flex justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEditUserModal(user)}
-                        className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-100"
-                      >
-                        Edit
-                      </button>
+            <div className="rounded-[22px] border border-dashed border-gray-300 bg-gray-50 p-5">
+              <p className="text-center text-sm font-black uppercase tracking-[0.18em] text-gray-400">
+                Preview Struk
+              </p>
 
-                      {user.role !== "owner" && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteUser(user)}
-                          className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-100"
-                        >
-                          Hapus
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
+                <p className="text-center text-base font-black text-gray-950">
+                  {storeSettings.storeName}
+                </p>
+                <p className="mt-1 text-center text-xs font-semibold text-gray-500">
+                  {storeSettings.branchName}
+                </p>
+                <p className="mt-1 text-center text-xs font-semibold text-gray-500">
+                  {storeSettings.phone}
+                </p>
 
-              {filteredUsers.length === 0 && (
-                <tr>
-                  <td
-                    colSpan="8"
-                    className="px-4 py-10 text-center text-sm text-slate-500"
-                  >
-                    Data pengguna tidak ditemukan.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                <div className="my-4 border-t border-dashed border-gray-300" />
 
-        <p className="mt-4 text-sm text-slate-500">
-          Menampilkan {filteredUsers.length} dari {users.length} pengguna.
-        </p>
-      </div>
-    </div>
-  );
-}
+                <div className="space-y-2 text-sm font-semibold text-gray-600">
+                  <div className="flex justify-between">
+                    <span>Nugget Ayam x1</span>
+                    <span>Rp 35.000</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Sosis Sapi x1</span>
+                    <span>Rp 42.000</span>
+                  </div>
+                </div>
 
-function SummaryCard({ label, value, valueClass = "text-slate-800" }) {
-  return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <h3 className={`mt-2 text-2xl font-bold ${valueClass}`}>{value}</h3>
-    </div>
-  );
-}
+                <div className="my-4 border-t border-dashed border-gray-300" />
 
-function UserModal({ modalMode, userForm, isSaving, onClose, onChange, onSubmit }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
-      <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-xl">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-bold text-slate-800">
-              {modalMode === "edit" ? "Edit Data Kasir" : "Tambah Kasir"}
-            </h3>
-            <p className="text-sm text-slate-500">
-              Data kasir akan tersimpan di tabel users backend.
-            </p>
+                <div className="flex justify-between text-base font-black text-gray-950">
+                  <span>Total</span>
+                  <span>Rp 77.000</span>
+                </div>
+
+                <p className="mt-5 text-center text-xs font-semibold leading-relaxed text-gray-500">
+                  {storeSettings.footerReceipt}
+                </p>
+              </div>
+            </div>
           </div>
 
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200"
+            onClick={clearLocalData}
+            className="mt-5 flex items-center justify-center gap-2 rounded-2xl bg-red-50 px-4 py-3 text-sm font-black text-red-600 transition hover:bg-red-100"
           >
-            X
+            <Trash2 className="h-4 w-4" />
+            Hapus Data Pengaturan Lokal
           </button>
-        </div>
-
-        <form onSubmit={onSubmit} className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <InputField
-              label="Nama Kasir"
-              name="name"
-              value={userForm.name}
-              onChange={onChange}
-              placeholder="Contoh: Kasir Cabang 1"
-            />
-
-            <InputField
-              label="Username"
-              name="username"
-              value={userForm.username}
-              onChange={onChange}
-              placeholder="Contoh: kasir1"
-            />
-
-            <InputField
-              label="Password"
-              name="password"
-              value={userForm.password}
-              onChange={onChange}
-              placeholder={
-                modalMode === "edit"
-                  ? "Kosongkan jika tidak ingin mengubah password"
-                  : "Minimal 6 karakter"
-              }
-            />
-
-            <InputField
-              label="No. Telepon"
-              name="phone"
-              value={userForm.phone}
-              onChange={onChange}
-              placeholder="Contoh: 08123456789"
-            />
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Cabang
-              </label>
-              <select
-                name="branch_id"
-                value={userForm.branch_id}
-                onChange={onChange}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-              >
-                <option value={1}>Cabang 1</option>
-                <option value={2}>Cabang 2</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Shift Default
-              </label>
-              <select
-                name="shift_name"
-                value={userForm.shift_name}
-                onChange={onChange}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-              >
-                <option>Shift Pagi</option>
-                <option>Shift Sore</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Status
-              </label>
-              <select
-                name="status"
-                value={userForm.status}
-                onChange={onChange}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-              >
-                <option>Aktif</option>
-                <option>Nonaktif</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-            >
-              Batal
-            </button>
-
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-slate-400"
-            >
-              {isSaving
-                ? "Menyimpan..."
-                : modalMode === "edit"
-                ? "Simpan Perubahan"
-                : "Tambah Kasir"}
-            </button>
-          </div>
-        </form>
-      </div>
+        </Card>
+      )}
     </div>
   );
 }

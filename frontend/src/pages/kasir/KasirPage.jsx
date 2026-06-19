@@ -1,979 +1,802 @@
 import { useEffect, useMemo, useState } from "react";
-
-import PageHeader from "../../components/PageHeader";
-import ProductCard from "../../components/ProductCard";
-import CartItem from "../../components/CartItem";
-import PaymentSummary from "../../components/PaymentSummary";
-
 import {
-  checkoutTransaction,
-  getCurrentShift,
-  getProducts,
-  getSettingsApi,
-} from "../../services/api";
+  AlertCircle,
+  Banknote,
+  CheckCircle2,
+  ChevronRight,
+  CreditCard,
+  ImageOff,
+  Loader2,
+  Minus,
+  Plus,
+  Printer,
+  QrCode,
+  ReceiptText,
+  Search,
+  ShoppingCart,
+  Trash2,
+  X,
+} from "lucide-react";
 
-const categories = ["Semua", "Frozen Food", "Snack", "Dessert"];
+const API_BASE_URL = "http://127.0.0.1:8000";
 
-const branches = [
-  { id: null, name: "Semua" },
-  { id: 1, name: "Cabang 1" },
-  { id: 2, name: "Cabang 2" },
+const paymentMethods = [
+  { id: "tunai", label: "Tunai", icon: Banknote },
+  { id: "qris", label: "QRIS", icon: QrCode },
+  { id: "transfer", label: "Transfer", icon: CreditCard },
 ];
-
-const defaultReceiptSetting = {
-  ppnActive: true,
-  ppnRate: 11,
-  maxDiscount: 10,
-  roundingType: "Tidak ada pembulatan",
-  invoiceFormat: "INV-{YYYY}{MM}{DD}-{0000}",
-  resetNumber: "Reset setiap hari",
-  paperSize: "Thermal 80mm",
-  margin: 5,
-  autoPrint: true,
-  showCashierName: true,
-  showBranchName: true,
-  footerNote: "Terima kasih telah berbelanja di Nikky Frozen.",
-};
 
 function formatRupiah(value) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: 0,
-  }).format(value || 0);
+  }).format(Number(value || 0));
 }
 
-function formatDateTime(dateString) {
+function formatDate(dateString) {
   if (!dateString) return "-";
 
   const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "-";
 
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  return date.toLocaleString("id-ID", {
+  return date.toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
 
-function getSavedData(key, fallbackData) {
-  const savedData = localStorage.getItem(key);
+function makeInvoiceNumber() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const random = Math.floor(Math.random() * 9000) + 1000;
 
-  if (!savedData) {
-    return fallbackData;
+  return `NF-${year}${month}${day}-${random}`;
+}
+
+function getImageUrl(image) {
+  if (!image) return null;
+
+  if (String(image).startsWith("http")) {
+    return image;
   }
 
-  try {
-    return JSON.parse(savedData);
-  } catch (error) {
-    localStorage.removeItem(key);
-    return fallbackData;
+  const cleanImage = String(image).replace(/^\/+/, "");
+
+  if (cleanImage.startsWith("storage/")) {
+    return `${API_BASE_URL}/${cleanImage}`;
   }
-}
 
-function getBranchIdByName(branchName) {
-  if (branchName === "Cabang 1") return 1;
-  if (branchName === "Cabang 2") return 2;
-
-  return null;
-}
-
-function getBranchNameById(branchId) {
-  if (Number(branchId) === 1) return "Cabang 1";
-  if (Number(branchId) === 2) return "Cabang 2";
-
-  return "-";
-}
-
-function normalizeReceiptSetting(setting = {}) {
-  return {
-    ...defaultReceiptSetting,
-    ...setting,
-    ppnActive:
-      setting.ppnActive !== undefined
-        ? Boolean(setting.ppnActive)
-        : defaultReceiptSetting.ppnActive,
-    ppnRate: Number(setting.ppnRate ?? defaultReceiptSetting.ppnRate),
-    maxDiscount: Number(
-      setting.maxDiscount ?? defaultReceiptSetting.maxDiscount
-    ),
-    margin: Number(setting.margin ?? defaultReceiptSetting.margin),
-    autoPrint:
-      setting.autoPrint !== undefined
-        ? Boolean(setting.autoPrint)
-        : defaultReceiptSetting.autoPrint,
-    showCashierName:
-      setting.showCashierName !== undefined
-        ? Boolean(setting.showCashierName)
-        : defaultReceiptSetting.showCashierName,
-    showBranchName:
-      setting.showBranchName !== undefined
-        ? Boolean(setting.showBranchName)
-        : defaultReceiptSetting.showBranchName,
-  };
+  return `${API_BASE_URL}/storage/${cleanImage}`;
 }
 
 function normalizeProduct(product) {
   return {
-    ...product,
     id: product.id,
-    branch_id: product.branch_id,
-    code: product.code,
-    name: product.name,
-    category: product.category,
+    branchId: product.branch_id,
+    branchName: product.branch?.name || `Cabang ${product.branch_id || "-"}`,
+    code: product.code || "-",
+    name: product.name || "-",
+    category: product.category || "Lainnya",
     stock: Number(product.stock || 0),
-    min_stock: Number(product.min_stock || 0),
     minStock: Number(product.min_stock || 0),
-    minimumStock: Number(product.min_stock || 0),
     price: Number(product.price || 0),
-    expired_date: product.expired_date,
-    expiredDate: product.expired_date,
-    storage_location: product.storage_location,
-    location: product.storage_location,
-    image: product.image || "",
-    status: product.status || "Aktif",
-    branch: product.branch?.name || getBranchNameById(product.branch_id),
+    expiredDate: product.expired_date || null,
+    storageLocation: product.storage_location || "-",
+    image: product.image || null,
+    status: product.status || "active",
   };
 }
 
-function normalizeShift(shift) {
-  if (!shift) return null;
+function ProductImage({ product }) {
+  const imageUrl = getImageUrl(product.image);
 
-  return {
-    id: shift.id,
-    branch_id: shift.branch_id,
-    branch: shift.branch?.name || getBranchNameById(shift.branch_id),
-    cashierName: shift.cashier_name,
-    username: shift.username,
-    shiftName: shift.shift_name,
-    openingCash: Number(shift.opening_cash || 0),
-    closingCash:
-      shift.closing_cash === null || shift.closing_cash === undefined
-        ? null
-        : Number(shift.closing_cash || 0),
-    openTime: shift.opened_at,
-    closeTime: shift.closed_at,
-    totalSales: Number(shift.total_sales || 0),
-    totalTransactions: Number(shift.total_transactions || 0),
-    expectedCash: Number(shift.expected_cash || 0),
-    cashDifference: Number(shift.cash_difference || 0),
-    note: shift.note || "-",
-    status: shift.status || "Berjalan",
-  };
+  if (!imageUrl) {
+    return (
+      <div className="flex h-28 w-full items-center justify-center rounded-2xl bg-gradient-to-br from-sky-50 to-gray-100 text-[#0B7FC3]">
+        <div className="text-center">
+          <ImageOff className="mx-auto h-7 w-7" />
+          <p className="mt-2 text-xs font-black uppercase tracking-wide">
+            {product.code}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imageUrl}
+      alt={product.name}
+      className="h-28 w-full rounded-2xl object-cover"
+      onError={(event) => {
+        event.currentTarget.style.display = "none";
+      }}
+    />
+  );
 }
 
-function normalizeBackendTransaction(transaction) {
-  return {
-    id: transaction.id,
-    invoiceNumber: transaction.invoice_number,
-    transactionDate: transaction.transaction_date,
-    cashierName: transaction.cashier_name,
-    username: transaction.username,
-    branch_id: transaction.branch_id,
-    branch: transaction.branch?.name || getBranchNameById(transaction.branch_id),
-    shift: transaction.shift_name,
-    totalItem: Number(transaction.total_item || 0),
-    subtotal: Number(transaction.subtotal || 0),
-    discount: Number(transaction.discount || 0),
-    tax: Number(transaction.tax || 0),
-    taxRate: Number(transaction.tax_rate || 0),
-    grandTotal: Number(transaction.grand_total || 0),
-    paymentMethod: transaction.payment_method,
-    paidAmount: Number(transaction.paid_amount || 0),
-    changeAmount: Number(transaction.change_amount || 0),
-    status: transaction.status,
-    items: (transaction.items || []).map((item) => ({
-      id: item.id,
-      product_id: item.product_id,
-      code: item.product_code,
-      name: item.product_name,
-      category: item.category,
-      price: Number(item.price || 0),
-      quantity: Number(item.quantity || 0),
-      subtotal: Number(item.subtotal || 0),
-    })),
-  };
+function ProductCard({ product, cartQuantity, onAdd }) {
+  const remainingStock = product.stock - cartQuantity;
+  const isInactive = String(product.status).toLowerCase() !== "active";
+  const isOutOfStock = product.stock <= 0;
+  const isLowStock = remainingStock > 0 && remainingStock <= product.minStock;
+  const cannotAdd = isInactive || isOutOfStock || remainingStock <= 0;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onAdd(product)}
+      disabled={cannotAdd}
+      className={`rounded-[22px] border bg-white p-3 text-left shadow-sm transition ${
+        cannotAdd
+          ? "cursor-not-allowed border-gray-200 opacity-60"
+          : "border-gray-200 hover:border-[#0B7FC3] hover:shadow-md"
+      }`}
+    >
+      <ProductImage product={product} />
+
+      <div className="mt-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-base font-black text-gray-950">
+            {product.name}
+          </p>
+          <p className="mt-0.5 text-xs font-bold text-gray-500">
+            {product.code} • {product.category}
+          </p>
+        </div>
+
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${
+            isOutOfStock
+              ? "bg-red-50 text-red-600"
+              : isLowStock
+              ? "bg-orange-50 text-orange-600"
+              : "bg-green-50 text-green-600"
+          }`}
+        >
+          {isOutOfStock ? "Habis" : `${remainingStock} stok`}
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-1 text-xs font-semibold text-gray-500">
+        <p>Exp: {formatDate(product.expiredDate)}</p>
+        <p>Lokasi: {product.storageLocation}</p>
+      </div>
+
+      <p className="mt-3 text-lg font-black text-[#0B7FC3]">
+        {formatRupiah(product.price)}
+      </p>
+
+      <div
+        className={`mt-3 rounded-2xl px-4 py-2.5 text-center text-sm font-black ${
+          cannotAdd ? "bg-gray-100 text-gray-400" : "bg-[#0B7FC3] text-white"
+        }`}
+      >
+        {cannotAdd ? "Tidak tersedia" : "Tambah"}
+      </div>
+    </button>
+  );
+}
+
+function CartItem({ item, onIncrease, onDecrease, onRemove }) {
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-black text-gray-950">
+            {item.name}
+          </p>
+          <p className="mt-0.5 text-xs font-bold text-gray-500">
+            {item.code} • {formatRupiah(item.price)}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onRemove(item.id)}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-red-500 hover:bg-red-50"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <div className="flex items-center rounded-2xl border border-gray-200 bg-white p-1">
+          <button
+            type="button"
+            onClick={() => onDecrease(item.id)}
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100"
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+
+          <span className="w-10 text-center text-sm font-black text-gray-950">
+            {item.quantity}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => onIncrease(item.id)}
+            disabled={item.quantity >= item.stock}
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+
+        <p className="text-sm font-black text-gray-950">
+          {formatRupiah(item.price * item.quantity)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PaymentModal({
+  isOpen,
+  cart,
+  total,
+  paymentMethod,
+  setPaymentMethod,
+  cashReceived,
+  setCashReceived,
+  onClose,
+  onSubmit,
+}) {
+  if (!isOpen) return null;
+
+  const change = Number(cashReceived || 0) - total;
+  const isCash = paymentMethod === "tunai";
+  const isCashInvalid = isCash && Number(cashReceived || 0) < total;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-[520px] rounded-[28px] bg-white p-5 shadow-2xl">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-gray-950">Pembayaran</h2>
+            <p className="mt-1 text-sm font-medium text-gray-500">
+              Periksa pesanan sebelum transaksi disimpan.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100 text-gray-600 hover:bg-gray-200"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mb-5 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-gray-500">Total Bayar</span>
+            <span className="text-2xl font-black text-gray-950">
+              {formatRupiah(total)}
+            </span>
+          </div>
+
+          <div className="mt-3 max-h-[150px] space-y-2 overflow-y-auto">
+            {cart.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <span className="font-semibold text-gray-600">
+                  {item.name} x{item.quantity}
+                </span>
+                <span className="font-black text-gray-950">
+                  {formatRupiah(item.price * item.quantity)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <p className="mb-2 text-sm font-black text-gray-700">
+            Metode Pembayaran
+          </p>
+
+          <div className="grid grid-cols-3 gap-2">
+            {paymentMethods.map((method) => {
+              const Icon = method.icon;
+
+              return (
+                <button
+                  key={method.id}
+                  type="button"
+                  onClick={() => setPaymentMethod(method.id)}
+                  className={`flex flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-sm font-black transition ${
+                    paymentMethod === method.id
+                      ? "border-[#0B7FC3] bg-sky-50 text-[#0B7FC3]"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <Icon className="h-5 w-5" />
+                  {method.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {isCash && (
+          <div className="mb-5">
+            <label className="mb-2 block text-sm font-black text-gray-700">
+              Uang Diterima
+            </label>
+
+            <input
+              type="number"
+              value={cashReceived}
+              onChange={(event) => setCashReceived(event.target.value)}
+              placeholder="Masukkan nominal uang"
+              className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-lg font-black text-gray-950 outline-none focus:border-[#0B7FC3] focus:ring-4 focus:ring-sky-100"
+            />
+
+            <div className="mt-3 flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3">
+              <span className="text-sm font-bold text-gray-500">Kembalian</span>
+              <span
+                className={`text-lg font-black ${
+                  change < 0 ? "text-red-600" : "text-green-600"
+                }`}
+              >
+                {formatRupiah(Math.max(change, 0))}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={isCashInvalid}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0B7FC3] px-4 py-4 text-base font-black text-white hover:bg-[#086da8] disabled:cursor-not-allowed disabled:bg-gray-300"
+        >
+          <CheckCircle2 className="h-5 w-5" />
+          Simpan Transaksi
+        </button>
+
+        {isCashInvalid && (
+          <p className="mt-3 text-center text-xs font-bold text-red-600">
+            Uang diterima belum cukup.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SuccessModal({ transaction, onClose }) {
+  if (!transaction) return null;
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-[420px] rounded-[28px] bg-white p-5 text-center shadow-2xl">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-50 text-green-600">
+          <CheckCircle2 className="h-8 w-8" />
+        </div>
+
+        <h2 className="mt-4 text-xl font-black text-gray-950">
+          Transaksi Berhasil
+        </h2>
+        <p className="mt-1 text-sm font-medium text-gray-500">
+          Pesanan berhasil diproses di tampilan kasir.
+        </p>
+
+        <div className="mt-5 rounded-2xl bg-gray-50 p-4 text-left">
+          <div className="flex justify-between gap-3">
+            <span className="text-sm font-bold text-gray-500">Invoice</span>
+            <span className="text-sm font-black text-gray-950">
+              {transaction.invoice}
+            </span>
+          </div>
+
+          <div className="mt-3 flex justify-between gap-3">
+            <span className="text-sm font-bold text-gray-500">Metode</span>
+            <span className="text-sm font-black text-gray-950">
+              {transaction.paymentMethod}
+            </span>
+          </div>
+
+          <div className="mt-3 flex justify-between gap-3">
+            <span className="text-sm font-bold text-gray-500">Total</span>
+            <span className="text-sm font-black text-gray-950">
+              {formatRupiah(transaction.total)}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-700 hover:bg-gray-50"
+          >
+            <Printer className="h-4 w-4" />
+            Cetak
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl bg-[#0B7FC3] px-4 py-3 text-sm font-black text-white hover:bg-[#086da8]"
+          >
+            Transaksi Baru
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function KasirPage() {
-  const [currentUser, setCurrentUser] = useState(null);
   const [products, setProducts] = useState([]);
-  const [runningShift, setRunningShift] = useState(null);
-  const [receiptSetting, setReceiptSetting] = useState(defaultReceiptSetting);
-
-  const [selectedCategory, setSelectedCategory] = useState("Semua");
-  const [selectedBranch, setSelectedBranch] = useState("Semua");
+  const [cart, setCart] = useState([]);
   const [searchKeyword, setSearchKeyword] = useState("");
-
-  const [cartItems, setCartItems] = useState([]);
-  const [discount, setDiscount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState("Tunai");
-  const [paidAmount, setPaidAmount] = useState("");
-
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [lastTransaction, setLastTransaction] = useState(null);
-  const [successMessage, setSuccessMessage] = useState("");
-
-  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
-  const [isLoadingShift, setIsLoadingShift] = useState(false);
-  const [isLoadingSettings, setIsLoadingSettings] = useState(false);
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("Semua");
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("tunai");
+  const [cashReceived, setCashReceived] = useState("");
+  const [successTransaction, setSuccessTransaction] = useState(null);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-
-  useEffect(() => {
-    const savedUser = localStorage.getItem("nikky_user");
-
-    if (savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser);
-
-        setCurrentUser(parsedUser);
-
-        if (parsedUser.role === "kasir") {
-          setSelectedBranch(parsedUser.branch || "Cabang 1");
-        } else {
-          setSelectedBranch("Semua");
-        }
-      } catch (error) {
-        setCurrentUser(null);
-      }
-    }
-  }, []);
-
-  const isOwner = currentUser?.role === "owner";
-  const isKasir = currentUser?.role === "kasir";
-
-  const activeBranchId = useMemo(() => {
-    if (currentUser?.role === "kasir") {
-      return getBranchIdByName(currentUser.branch) || 1;
-    }
-
-    if (selectedBranch !== "Semua") {
-      return getBranchIdByName(selectedBranch);
-    }
-
-    return null;
-  }, [currentUser, selectedBranch]);
-
-  const fetchSettings = async () => {
-    try {
-      setIsLoadingSettings(true);
-
-      const settingsData = await getSettingsApi();
-      const backendReceiptSetting = normalizeReceiptSetting(
-        settingsData?.receipt_setting || {}
-      );
-
-      setReceiptSetting(backendReceiptSetting);
-
-      localStorage.setItem(
-        "nikky_receipt_setting",
-        JSON.stringify(backendReceiptSetting)
-      );
-    } catch (error) {
-      const savedReceiptSetting = getSavedData(
-        "nikky_receipt_setting",
-        defaultReceiptSetting
-      );
-
-      setReceiptSetting(normalizeReceiptSetting(savedReceiptSetting));
-      setErrorMessage(
-        error.message ||
-          "Gagal mengambil pengaturan dari backend. Menggunakan pengaturan terakhir."
-      );
-    } finally {
-      setIsLoadingSettings(false);
-    }
-  };
 
   const fetchProducts = async () => {
     try {
       setIsLoadingProducts(true);
       setErrorMessage("");
 
-      const params = {};
+      const response = await fetch(`${API_BASE_URL}/api/products`);
+      const result = await response.json();
 
-      if (activeBranchId) {
-        params.branch_id = activeBranchId;
-      }
+      const productList = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.data)
+        ? result.data
+        : [];
 
-      const productData = await getProducts(params);
-      const normalizedProducts = productData.map(normalizeProduct);
-
-      setProducts(normalizedProducts);
+      setProducts(productList.map(normalizeProduct));
     } catch (error) {
-      setErrorMessage(
-        error.message ||
-          "Gagal mengambil data produk dari backend. Pastikan Laravel server berjalan."
-      );
+      console.error("Gagal mengambil produk:", error);
+      setErrorMessage("Produk gagal dimuat. Pastikan backend Laravel sedang berjalan.");
     } finally {
       setIsLoadingProducts(false);
     }
   };
 
-  const fetchRunningShift = async () => {
-    if (!currentUser?.username || currentUser?.role !== "kasir") {
-      setRunningShift(null);
-      return null;
-    }
-
-    try {
-      setIsLoadingShift(true);
-
-      const shiftData = await getCurrentShift(currentUser.username);
-      const normalizedShift = shiftData ? normalizeShift(shiftData) : null;
-
-      setRunningShift(normalizedShift);
-
-      return normalizedShift;
-    } catch (error) {
-      setRunningShift(null);
-      setErrorMessage(
-        error.message || "Gagal mengambil data shift berjalan dari backend."
-      );
-
-      return null;
-    } finally {
-      setIsLoadingShift(false);
-    }
-  };
-
-  const refreshPageData = async () => {
-    await Promise.all([fetchSettings(), fetchProducts(), fetchRunningShift()]);
-  };
-
   useEffect(() => {
-    if (!currentUser) return;
+    fetchProducts();
+  }, []);
 
-    refreshPageData();
-  }, [currentUser, activeBranchId]);
+  const categories = useMemo(() => {
+    return ["Semua", ...new Set(products.map((product) => product.category))];
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      const keyword = searchKeyword.toLowerCase();
+    return products
+      .filter((product) => String(product.status).toLowerCase() === "active")
+      .filter((product) => {
+        const keyword = searchKeyword.toLowerCase();
 
-      const matchCategory =
-        selectedCategory === "Semua" || product.category === selectedCategory;
+        const matchSearch =
+          product.name.toLowerCase().includes(keyword) ||
+          product.code.toLowerCase().includes(keyword) ||
+          product.category.toLowerCase().includes(keyword);
 
-      const matchSearch =
-        product.name.toLowerCase().includes(keyword) ||
-        product.code.toLowerCase().includes(keyword);
+        const matchCategory =
+          selectedCategory === "Semua" || product.category === selectedCategory;
 
-      return matchCategory && matchSearch;
+        return matchSearch && matchCategory;
+      });
+  }, [products, searchKeyword, selectedCategory]);
+
+  const subtotal = useMemo(() => {
+    return cart.reduce((total, item) => total + item.price * item.quantity, 0);
+  }, [cart]);
+
+  const totalItems = useMemo(() => {
+    return cart.reduce((total, item) => total + item.quantity, 0);
+  }, [cart]);
+
+  const getCartQuantity = (productId) => {
+    return cart.find((item) => item.id === productId)?.quantity || 0;
+  };
+
+  const handleAddToCart = (product) => {
+    if (product.stock <= 0) return;
+
+    setCart((currentCart) => {
+      const existingItem = currentCart.find((item) => item.id === product.id);
+
+      if (existingItem) {
+        if (existingItem.quantity >= product.stock) return currentCart;
+
+        return currentCart.map((item) =>
+          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+
+      return [...currentCart, { ...product, quantity: 1 }];
     });
-  }, [products, selectedCategory, searchKeyword]);
-
-  const subtotal = cartItems.reduce((total, item) => {
-    return total + Number(item.price || 0) * Number(item.quantity || 0);
-  }, 0);
-
-  const discountAmount = Number(discount) || 0;
-
-  const taxRatePercent = receiptSetting.ppnActive
-    ? Number(receiptSetting.ppnRate || 0)
-    : 0;
-
-  const taxRate = taxRatePercent / 100;
-
-  const taxableAmount = Math.max(subtotal - discountAmount, 0);
-  const taxAmount = Math.round(taxableAmount * taxRate);
-  const grandTotal = taxableAmount + taxAmount;
-
-  const changeAmount =
-    paymentMethod === "Tunai" ? Number(paidAmount || 0) - grandTotal : 0;
-
-  const totalItem = cartItems.reduce(
-    (total, item) => total + Number(item.quantity || 0),
-    0
-  );
-
-  const showSuccess = (message) => {
-    setSuccessMessage(message);
-
-    setTimeout(() => {
-      setSuccessMessage("");
-    }, 2500);
-  };
-
-  const handleRefresh = async () => {
-    await refreshPageData();
-    showSuccess("Data produk, shift, dan pengaturan berhasil diperbarui.");
-  };
-
-  const handleAddToCart = async (product) => {
-    if (currentUser?.role === "kasir") {
-      const latestShift = await fetchRunningShift();
-
-      if (!latestShift) {
-        alert("Buka shift terlebih dahulu sebelum melakukan transaksi.");
-        return;
-      }
-    }
-
-    if (Number(product.stock) <= 0) {
-      alert("Stok produk habis.");
-      return;
-    }
-
-    const existingItem = cartItems.find((item) => item.id === product.id);
-
-    if (existingItem) {
-      if (Number(existingItem.quantity) >= Number(product.stock)) {
-        alert("Jumlah produk di keranjang sudah mencapai stok tersedia.");
-        return;
-      }
-
-      setCartItems((prevItems) =>
-        prevItems.map((item) =>
-          item.id === product.id
-            ? {
-                ...item,
-                quantity: item.quantity + 1,
-              }
-            : item
-        )
-      );
-
-      return;
-    }
-
-    setCartItems((prevItems) => [
-      ...prevItems,
-      {
-        ...product,
-        product_id: product.id,
-        quantity: 1,
-      },
-    ]);
   };
 
   const handleIncreaseQuantity = (productId) => {
-    setCartItems((prevItems) =>
-      prevItems.map((item) => {
-        if (item.id !== productId) {
-          return item;
-        }
-
-        if (Number(item.quantity) >= Number(item.stock)) {
-          alert("Jumlah produk tidak boleh melebihi stok tersedia.");
-          return item;
-        }
-
-        return {
-          ...item,
-          quantity: item.quantity + 1,
-        };
-      })
+    setCart((currentCart) =>
+      currentCart.map((item) =>
+        item.id === productId && item.quantity < item.stock
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      )
     );
   };
 
   const handleDecreaseQuantity = (productId) => {
-    setCartItems((prevItems) =>
-      prevItems
+    setCart((currentCart) =>
+      currentCart
         .map((item) =>
-          item.id === productId
-            ? {
-                ...item,
-                quantity: item.quantity - 1,
-              }
-            : item
+          item.id === productId ? { ...item, quantity: item.quantity - 1 } : item
         )
         .filter((item) => item.quantity > 0)
     );
   };
 
-  const handleRemoveFromCart = (productId) => {
-    setCartItems((prevItems) =>
-      prevItems.filter((item) => item.id !== productId)
-    );
+  const handleRemoveItem = (productId) => {
+    setCart((currentCart) => currentCart.filter((item) => item.id !== productId));
   };
 
   const handleClearCart = () => {
-    setCartItems([]);
-    setDiscount(0);
-    setPaymentMethod("Tunai");
-    setPaidAmount("");
+    if (cart.length === 0) return;
+
+    const confirmClear = confirm("Kosongkan keranjang?");
+    if (!confirmClear) return;
+
+    setCart([]);
   };
 
-  const saveTransactionToLocalStorageBackup = (transactionData) => {
-    const savedTransactions = getSavedData("nikky_transactions_backup", []);
-    const updatedTransactions = [transactionData, ...savedTransactions];
+  const handleOpenPayment = () => {
+    if (cart.length === 0) return;
 
-    localStorage.setItem(
-      "nikky_transactions_backup",
-      JSON.stringify(updatedTransactions)
-    );
+    setPaymentMethod("tunai");
+    setCashReceived("");
+    setIsPaymentOpen(true);
   };
 
-  const handleCheckout = async () => {
-    if (isCheckingOut) return;
-
-    if (cartItems.length === 0) {
-      alert("Keranjang masih kosong.");
-      return;
-    }
-
-    if (!currentUser) {
-      alert("Data login tidak ditemukan. Silakan login ulang.");
-      return;
-    }
-
-    await fetchSettings();
-
-    let latestRunningShift = runningShift;
-
-    if (currentUser.role === "kasir") {
-      latestRunningShift = await fetchRunningShift();
-
-      if (!latestRunningShift) {
-        alert("Kasir harus membuka shift terlebih dahulu sebelum transaksi.");
-        return;
-      }
-
-      if (latestRunningShift.status !== "Berjalan") {
-        alert("Shift sudah tidak berjalan. Silakan buka shift baru.");
-        return;
-      }
-    }
-
-    if (currentUser.role === "owner" && !activeBranchId) {
-      alert("Owner harus memilih cabang terlebih dahulu sebelum transaksi.");
-      return;
-    }
-
-    if (discountAmount > subtotal) {
-      alert("Diskon tidak boleh lebih besar dari subtotal.");
-      return;
-    }
-
-    if (paymentMethod === "Tunai" && Number(paidAmount || 0) < grandTotal) {
-      alert("Nominal pembayaran belum mencukupi total transaksi.");
-      return;
-    }
-
-    const hasInvalidStock = cartItems.some((item) => {
-      const latestProduct = products.find((product) => product.id === item.id);
-
-      if (!latestProduct) return true;
-
-      return Number(item.quantity) > Number(latestProduct.stock);
-    });
-
-    if (hasInvalidStock) {
-      alert("Ada produk dengan jumlah melebihi stok tersedia.");
-      return;
-    }
-
-    const checkoutPayload = {
-      branch_id: activeBranchId,
-      cashier_name: currentUser.name,
-      username: currentUser.username,
-      shift_name:
-        latestRunningShift?.shiftName || currentUser.shift || "Shift Aktif",
-      discount: discountAmount,
-      tax_rate: taxRatePercent,
-      payment_method: paymentMethod,
-      paid_amount:
-        paymentMethod === "Tunai" ? Number(paidAmount || 0) : grandTotal,
-      items: cartItems.map((item) => ({
-        product_id: item.id,
-        quantity: Number(item.quantity),
-      })),
+  const handleSubmitTransaction = () => {
+    const transaction = {
+      invoice: makeInvoiceNumber(),
+      total: subtotal,
+      paymentMethod:
+        paymentMethods.find((method) => method.id === paymentMethod)?.label ||
+        "Tunai",
+      items: cart,
+      createdAt: new Date().toISOString(),
     };
 
-    try {
-      setIsCheckingOut(true);
-      setErrorMessage("");
+    setProducts((currentProducts) =>
+      currentProducts.map((product) => {
+        const soldItem = cart.find((item) => item.id === product.id);
 
-      const backendTransaction = await checkoutTransaction(checkoutPayload);
-      const normalizedTransaction =
-        normalizeBackendTransaction(backendTransaction);
+        if (!soldItem) return product;
 
-      saveTransactionToLocalStorageBackup(normalizedTransaction);
+        return {
+          ...product,
+          stock: Math.max(product.stock - soldItem.quantity, 0),
+        };
+      })
+    );
 
-      await fetchProducts();
-      await fetchRunningShift();
-
-      setLastTransaction(normalizedTransaction);
-      setShowPaymentModal(true);
-
-      showSuccess(
-        `Transaksi berhasil disimpan ke backend dengan PPN ${taxRatePercent}%.`
-      );
-    } catch (error) {
-      alert(error.message || "Transaksi gagal diproses.");
-    } finally {
-      setIsCheckingOut(false);
-    }
-  };
-
-  const handleNewTransaction = () => {
-    setShowPaymentModal(false);
-    setLastTransaction(null);
-    handleClearCart();
+    setCart([]);
+    setCashReceived("");
+    setIsPaymentOpen(false);
+    setSuccessTransaction(transaction);
   };
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <PageHeader
-        title="Kasir / POS"
-        description="Transaksi penjualan produk Nikky Frozen berdasarkan cabang, shift, dan pengaturan pajak dari backend."
-      />
-
-      <div className="mb-6 flex flex-wrap justify-end gap-3">
-        <button
-          type="button"
-          onClick={handleRefresh}
-          className="rounded-xl border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-700 shadow-sm hover:bg-green-50"
-        >
-          Refresh Data
-        </button>
-      </div>
-
-      {successMessage && (
-        <div className="mb-5 rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-sm font-semibold text-green-700">
-          {successMessage}
-        </div>
-      )}
-
-      {errorMessage && (
-        <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
-          {errorMessage}
-        </div>
-      )}
-
-      {isLoadingSettings && (
-        <div className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-700">
-          Mengambil pengaturan PPN dari backend...
-        </div>
-      )}
-
-      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Kasir</p>
-          <h3 className="mt-2 text-lg font-bold text-slate-800">
-            {currentUser?.name || "-"}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            {isOwner
-              ? `${selectedBranch} • Owner`
-              : `${currentUser?.branch || "-"} • ${currentUser?.shift || "-"}`}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Status Shift</p>
-          <h3
-            className={`mt-2 text-lg font-bold ${
-              runningShift || isOwner ? "text-green-600" : "text-red-600"
-            }`}
-          >
-            {isOwner
-              ? "Owner Mode"
-              : isLoadingShift
-              ? "Mengecek..."
-              : runningShift
-              ? "Berjalan"
-              : "Belum Dibuka"}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            {isOwner
-              ? "Owner dapat memilih cabang transaksi"
-              : runningShift
-              ? formatDateTime(runningShift.openTime)
-              : "Buka shift terlebih dahulu"}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Item Keranjang</p>
-          <h3 className="mt-2 text-lg font-bold text-blue-600">
-            {totalItem} item
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Total produk yang dipilih
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Total Sementara</p>
-          <h3 className="mt-2 text-lg font-bold text-green-600">
-            {formatRupiah(grandTotal)}
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            {receiptSetting.ppnActive
-              ? `Termasuk PPN ${taxRatePercent}% dari backend`
-              : "Tanpa PPN dari backend"}
-          </p>
-        </div>
-      </div>
-
-      {runningShift && isKasir && (
-        <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-sm font-semibold text-green-700">
-          Shift aktif: {runningShift.shiftName} • Kas awal{" "}
-          {formatRupiah(runningShift.openingCash)} • Dibuka{" "}
-          {formatDateTime(runningShift.openTime)}
-        </div>
-      )}
-
-      {!runningShift && currentUser?.role === "kasir" && (
-        <div className="mb-6 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-4 text-sm font-semibold text-yellow-700">
-          Shift belum dibuka. Silakan buka shift terlebih dahulu melalui menu
-          Shift Saya sebelum melakukan transaksi.
-        </div>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-3">
-        <section className="xl:col-span-2">
-          <div className="rounded-3xl bg-white p-5 shadow-sm">
-            <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="min-h-screen bg-[#F3F4F6] px-4 py-5 sm:px-6 lg:px-8">
+      <div className="grid gap-5 xl:grid-cols-[1fr_390px]">
+        <div className="min-w-0">
+          <div className="mb-4 rounded-[24px] border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h3 className="text-lg font-bold text-slate-800">
-                  Daftar Produk
-                </h3>
-                <p className="text-sm text-slate-500">
-                  Produk diambil dari backend sesuai cabang login.
+                <h1 className="text-lg font-black text-gray-950">Pilih Produk</h1>
+                <p className="mt-1 text-sm font-medium text-gray-500">
+                  Data produk diambil dari database Laravel.
                 </p>
               </div>
 
-              <input
-                type="text"
-                placeholder="Cari nama / kode barang..."
-                value={searchKeyword}
-                onChange={(event) => setSearchKeyword(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 lg:w-80"
-              />
+              <button
+                type="button"
+                onClick={fetchProducts}
+                className="rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-black text-gray-700 hover:bg-gray-50"
+              >
+                Refresh Produk
+              </button>
             </div>
 
-            <div className="mb-5 flex flex-wrap gap-2">
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => setSelectedCategory(category)}
-                  className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-                    selectedCategory === category
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={searchKeyword}
+                  onChange={(event) => setSearchKeyword(event.target.value)}
+                  placeholder="Cari nama, kode, atau kategori produk..."
+                  className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-sm font-bold text-gray-800 outline-none transition focus:border-[#0B7FC3] focus:bg-white focus:ring-4 focus:ring-sky-100"
+                />
+              </div>
 
-            {isOwner ? (
-              <div className="mb-5 flex flex-wrap gap-2">
-                {branches.map((branch) => (
+              <div className="flex gap-2 overflow-x-auto">
+                {categories.map((category) => (
                   <button
-                    key={branch.name}
+                    key={category}
                     type="button"
-                    onClick={() => {
-                      setSelectedBranch(branch.name);
-                      handleClearCart();
-                    }}
-                    className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-                      selectedBranch === branch.name
-                        ? "bg-slate-800 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    onClick={() => setSelectedCategory(category)}
+                    className={`shrink-0 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                      selectedCategory === category
+                        ? "bg-[#0B7FC3] text-white shadow-sm"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}
                   >
-                    {branch.name}
+                    {category}
                   </button>
                 ))}
               </div>
-            ) : (
-              <div className="mb-5 rounded-2xl bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-700">
-                Produk yang tampil adalah produk {currentUser?.branch || "-"}.
-              </div>
-            )}
+            </div>
+          </div>
 
-            {isLoadingProducts ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                Mengambil data produk dari backend...
-              </div>
-            ) : (
-              <>
-                <div className="grid items-stretch gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                  {filteredProducts.map((product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      onAddToCart={handleAddToCart}
-                    />
-                  ))}
+          {errorMessage && (
+            <div className="mb-4 flex items-center gap-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+              <AlertCircle className="h-5 w-5" />
+              {errorMessage}
+            </div>
+          )}
+
+          {isLoadingProducts ? (
+            <div className="rounded-[24px] border border-gray-200 bg-white p-8 text-center shadow-sm">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#0B7FC3]" />
+              <p className="mt-3 font-black text-gray-950">Memuat produk...</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+              {filteredProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  cartQuantity={getCartQuantity(product.id)}
+                  onAdd={handleAddToCart}
+                />
+              ))}
+
+              {filteredProducts.length === 0 && (
+                <div className="col-span-full rounded-[24px] border border-gray-200 bg-white p-8 text-center shadow-sm">
+                  <p className="font-black text-gray-950">Produk tidak ditemukan</p>
+                  <p className="mt-1 text-sm font-medium text-gray-500">
+                    Coba gunakan kata kunci atau kategori lain.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <aside className="xl:sticky xl:top-24 xl:self-start">
+          <div className="rounded-[26px] border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-100 p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-black text-gray-950">Keranjang</h2>
+                  <p className="mt-1 text-sm font-medium text-gray-500">
+                    {totalItems} item dipilih
+                  </p>
                 </div>
 
-                {filteredProducts.length === 0 && (
-                  <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                    Produk tidak ditemukan.
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </section>
-
-        <aside className="space-y-5">
-          <div className="rounded-3xl bg-white p-5 shadow-sm">
-            <div className="mb-5">
-              <h3 className="text-lg font-bold text-slate-800">Keranjang</h3>
-              <p className="text-sm text-slate-500">
-                Produk yang dipilih pelanggan.
-              </p>
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-50 text-[#0B7FC3]">
+                  <ShoppingCart className="h-5 w-5" />
+                </div>
+              </div>
             </div>
 
-            <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
-              {cartItems.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-                  Belum ada produk dipilih.
-                </div>
-              ) : (
-                cartItems.map((item) => (
+            <div className="max-h-[420px] space-y-3 overflow-y-auto p-5">
+              {cart.length > 0 ? (
+                cart.map((item) => (
                   <CartItem
                     key={item.id}
                     item={item}
                     onIncrease={handleIncreaseQuantity}
                     onDecrease={handleDecreaseQuantity}
-                    onRemove={handleRemoveFromCart}
+                    onRemove={handleRemoveItem}
                   />
                 ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center">
+                  <ReceiptText className="mx-auto h-8 w-8 text-gray-400" />
+                  <p className="mt-3 text-sm font-black text-gray-700">
+                    Keranjang masih kosong
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-gray-500">
+                    Pilih produk untuk mulai transaksi.
+                  </p>
+                </div>
               )}
             </div>
-          </div>
 
-          <PaymentSummary
-            cartItems={cartItems}
-            discount={discount}
-            taxRate={taxRate}
-            paymentMethod={paymentMethod}
-            paidAmount={paidAmount}
-            onDiscountChange={setDiscount}
-            onPaymentMethodChange={setPaymentMethod}
-            onPaidAmountChange={setPaidAmount}
-            onCheckout={handleCheckout}
-            onClearCart={handleClearCart}
-          />
+            <div className="border-t border-gray-100 p-5">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-gray-500">Subtotal</span>
+                  <span className="text-sm font-black text-gray-950">
+                    {formatRupiah(subtotal)}
+                  </span>
+                </div>
 
-          {isCheckingOut && (
-            <div className="rounded-2xl bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-700">
-              Memproses transaksi ke backend dan memperbarui stok...
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-gray-500">Diskon</span>
+                  <span className="text-sm font-black text-gray-950">
+                    {formatRupiah(0)}
+                  </span>
+                </div>
+
+                <div className="border-t border-gray-100 pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-base font-black text-gray-950">Total</span>
+                    <span className="text-2xl font-black text-[#0B7FC3]">
+                      {formatRupiah(subtotal)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={handleClearCart}
+                  disabled={cart.length === 0}
+                  className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-black text-red-600 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Kosongkan
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenPayment}
+                  disabled={cart.length === 0}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-[#0B7FC3] px-4 py-3 text-sm font-black text-white hover:bg-[#086da8] disabled:cursor-not-allowed disabled:bg-gray-300"
+                >
+                  Bayar
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              <p className="mt-4 text-center text-xs font-medium text-gray-400">
+                Tahap ini masih menyimpan transaksi di tampilan. Penyimpanan ke database transaksi kita sambungkan setelah ini.
+              </p>
             </div>
-          )}
+          </div>
         </aside>
       </div>
 
-      {showPaymentModal && lastTransaction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
-            <div className="mb-5 text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl text-green-600">
-                ✓
-              </div>
+      <PaymentModal
+        isOpen={isPaymentOpen}
+        cart={cart}
+        total={subtotal}
+        paymentMethod={paymentMethod}
+        setPaymentMethod={setPaymentMethod}
+        cashReceived={cashReceived}
+        setCashReceived={setCashReceived}
+        onClose={() => setIsPaymentOpen(false)}
+        onSubmit={handleSubmitTransaction}
+      />
 
-              <h3 className="text-xl font-bold text-slate-800">
-                Pembayaran Berhasil
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Transaksi berhasil disimpan ke backend dan stok sudah berkurang.
-              </p>
-            </div>
-
-            <div className="space-y-3 rounded-2xl bg-slate-50 p-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">No. Invoice</span>
-                <span className="font-bold text-slate-800">
-                  {lastTransaction.invoiceNumber}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Kasir</span>
-                <span className="font-bold text-slate-800">
-                  {lastTransaction.cashierName}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Cabang</span>
-                <span className="font-bold text-slate-800">
-                  {lastTransaction.branch}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Shift</span>
-                <span className="font-bold text-slate-800">
-                  {lastTransaction.shift}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Metode</span>
-                <span className="font-bold text-slate-800">
-                  {lastTransaction.paymentMethod}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">PPN</span>
-                <span className="font-bold text-slate-800">
-                  {lastTransaction.taxRate}%
-                </span>
-              </div>
-
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Total Bayar</span>
-                <span className="font-bold text-blue-600">
-                  {formatRupiah(lastTransaction.grandTotal)}
-                </span>
-              </div>
-
-              {lastTransaction.paymentMethod === "Tunai" && (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Uang Dibayar</span>
-                    <span className="font-bold text-slate-800">
-                      {formatRupiah(lastTransaction.paidAmount)}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Kembalian</span>
-                    <span className="font-bold text-green-600">
-                      {formatRupiah(lastTransaction.changeAmount)}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(false)}
-                className="rounded-xl border border-slate-200 py-3 font-bold text-slate-600 hover:bg-slate-50"
-              >
-                Tutup
-              </button>
-
-              <button
-                type="button"
-                onClick={handleNewTransaction}
-                className="rounded-xl bg-blue-600 py-3 font-bold text-white hover:bg-blue-700"
-              >
-                Transaksi Baru
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SuccessModal
+        transaction={successTransaction}
+        onClose={() => setSuccessTransaction(null)}
+      />
     </div>
   );
 }

@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
-
-import PageHeader from "../../components/PageHeader";
+import { useMemo, useState } from "react";
 import {
-  closeShift,
-  getCurrentShift,
-  getShifts,
-  openShift,
-} from "../../services/api";
+  Banknote,
+  CheckCircle2,
+  Clock3,
+  LogIn,
+  LogOut,
+  WalletCards,
+} from "lucide-react";
 
-const branches = ["Semua", "Cabang 1", "Cabang 2"];
-const statuses = ["Semua", "Berjalan", "Selesai"];
+function formatRupiah(value) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(Number(value || 0));
+}
 
 function formatDateTime(dateString) {
   if (!dateString) return "-";
@@ -27,889 +32,328 @@ function formatDateTime(dateString) {
   });
 }
 
-function formatRupiah(value) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(value || 0);
-}
+function getCurrentUser() {
+  const savedUser = localStorage.getItem("nikky_user");
 
-function getSavedData(key, fallbackData) {
-  const savedData = localStorage.getItem(key);
-
-  if (!savedData) {
-    return fallbackData;
+  if (!savedUser) {
+    return {
+      id: 1,
+      name: "Kasir Nikky Frozen",
+      username: "kasir",
+      branch: "Cabang 1",
+    };
   }
 
   try {
-    return JSON.parse(savedData);
-  } catch (error) {
-    localStorage.removeItem(key);
-    return fallbackData;
+    return JSON.parse(savedUser);
+  } catch {
+    return {
+      id: 1,
+      name: "Kasir Nikky Frozen",
+      username: "kasir",
+      branch: "Cabang 1",
+    };
   }
 }
 
-function getBranchIdByName(branchName) {
-  if (branchName === "Cabang 1") return 1;
-  if (branchName === "Cabang 2") return 2;
-
-  return null;
+function Card({ children, className = "" }) {
+  return (
+    <div
+      className={`rounded-[22px] border border-gray-200 bg-white shadow-sm ${className}`}
+    >
+      {children}
+    </div>
+  );
 }
 
-function getBranchNameById(branchId) {
-  if (Number(branchId) === 1) return "Cabang 1";
-  if (Number(branchId) === 2) return "Cabang 2";
-
-  return "-";
-}
-
-function normalizeShift(shift) {
-  return {
-    id: shift.id,
-    branch_id: shift.branch_id,
-    branch: shift.branch?.name || getBranchNameById(shift.branch_id),
-
-    cashierName: shift.cashier_name,
-    username: shift.username,
-    shiftName: shift.shift_name,
-
-    openTime: shift.opened_at,
-    closeTime: shift.closed_at,
-
-    openingCash: Number(shift.opening_cash || 0),
-    closingCash:
-      shift.closing_cash === null || shift.closing_cash === undefined
-        ? null
-        : Number(shift.closing_cash || 0),
-
-    totalSales: Number(shift.total_sales || 0),
-    totalTransactions: Number(shift.total_transactions || 0),
-    expectedCash: Number(shift.expected_cash || 0),
-    cashDifference: Number(shift.cash_difference || 0),
-
-    note: shift.note || "-",
-    status: shift.status || "Berjalan",
-    createdAt: shift.created_at,
-    updatedAt: shift.updated_at,
+function Badge({ children, variant = "gray" }) {
+  const variants = {
+    green: "bg-green-50 text-green-700 ring-green-100",
+    orange: "bg-orange-50 text-orange-700 ring-orange-100",
+    red: "bg-red-50 text-red-700 ring-red-100",
+    blue: "bg-sky-50 text-[#0B7FC3] ring-sky-100",
+    gray: "bg-gray-50 text-gray-600 ring-gray-100",
   };
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-black ring-1 ${variants[variant]}`}
+    >
+      {children}
+    </span>
+  );
 }
 
 function ShiftPage() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const currentUser = getCurrentUser();
 
-  const [shifts, setShifts] = useState([]);
-  const [currentKasirShift, setCurrentKasirShift] = useState(null);
-
+  const [activeShift, setActiveShift] = useState(null);
   const [openingCash, setOpeningCash] = useState("");
   const [closingCash, setClosingCash] = useState("");
-  const [openNote, setOpenNote] = useState("");
-  const [closeNote, setCloseNote] = useState("");
+  const [history, setHistory] = useState([]);
 
-  const [selectedBranch, setSelectedBranch] = useState("Semua");
-  const [selectedStatus, setSelectedStatus] = useState("Semua");
-  const [selectedDate, setSelectedDate] = useState("");
-  const [searchKeyword, setSearchKeyword] = useState("");
-
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    const savedUser = getSavedData("nikky_user", null);
-
-    if (savedUser) {
-      setCurrentUser(savedUser);
-
-      if (savedUser.role === "kasir") {
-        setSelectedBranch(savedUser.branch || "Cabang 1");
-      }
-    }
-  }, []);
-
-  const isOwner = currentUser?.role === "owner";
-  const isKasir = currentUser?.role === "kasir";
-
-  const fetchCurrentShift = async (username) => {
-    if (!username) return;
-
-    try {
-      const shiftData = await getCurrentShift(username);
-
-      if (shiftData) {
-        setCurrentKasirShift(normalizeShift(shiftData));
-      } else {
-        setCurrentKasirShift(null);
-      }
-    } catch (error) {
-      setCurrentKasirShift(null);
-    }
-  };
-
-  const fetchShifts = async () => {
-    if (!currentUser) return;
-
-    try {
-      setIsLoading(true);
-      setErrorMessage("");
-
-      const params = {};
-
-      if (isKasir) {
-        params.username = currentUser.username;
-      }
-
-      if (isOwner && selectedBranch !== "Semua") {
-        params.branch_id = getBranchIdByName(selectedBranch);
-      }
-
-      if (selectedStatus !== "Semua") {
-        params.status = selectedStatus;
-      }
-
-      if (selectedDate) {
-        params.date = selectedDate;
-      }
-
-      const shiftData = await getShifts(params);
-      const normalizedShifts = shiftData.map(normalizeShift);
-
-      setShifts(normalizedShifts);
-
-      if (isKasir) {
-        await fetchCurrentShift(currentUser.username);
-      }
-    } catch (error) {
-      setErrorMessage(
-        error.message ||
-          "Gagal mengambil data shift dari backend. Pastikan Laravel server berjalan."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!currentUser) return;
-
-    fetchShifts();
-  }, [currentUser, selectedBranch, selectedStatus, selectedDate]);
-
-  const showSuccess = (message) => {
-    setSuccessMessage(message);
-
-    setTimeout(() => {
-      setSuccessMessage("");
-    }, 2500);
-  };
-
-  const myShiftHistory = useMemo(() => {
-    if (!currentUser) return [];
-
-    return shifts.filter((shift) => shift.username === currentUser.username);
-  }, [shifts, currentUser]);
-
-  const filteredShifts = useMemo(() => {
-    return shifts.filter((shift) => {
-      const keyword = searchKeyword.toLowerCase();
-
-      const matchSearch =
-        shift.cashierName?.toLowerCase().includes(keyword) ||
-        shift.username?.toLowerCase().includes(keyword) ||
-        shift.branch?.toLowerCase().includes(keyword) ||
-        shift.shiftName?.toLowerCase().includes(keyword);
-
-      return matchSearch;
-    });
-  }, [shifts, searchKeyword]);
-
-  const summary = useMemo(() => {
-    const runningShift = shifts.filter(
-      (shift) => shift.status === "Berjalan"
-    ).length;
-
-    const closedShift = shifts.filter(
-      (shift) => shift.status === "Selesai"
-    ).length;
-
-    const branchOne = shifts.filter((shift) => shift.branch === "Cabang 1")
-      .length;
-
-    const branchTwo = shifts.filter((shift) => shift.branch === "Cabang 2")
-      .length;
-
-    const totalOpeningCash = shifts.reduce(
-      (total, shift) => total + Number(shift.openingCash || 0),
-      0
-    );
-
-    const totalClosingCash = shifts.reduce(
-      (total, shift) => total + Number(shift.closingCash || 0),
-      0
-    );
-
-    const totalSales = shifts.reduce(
-      (total, shift) => total + Number(shift.totalSales || 0),
-      0
-    );
-
-    const totalTransactions = shifts.reduce(
-      (total, shift) => total + Number(shift.totalTransactions || 0),
-      0
-    );
-
-    const totalDifference = shifts.reduce(
-      (total, shift) => total + Number(shift.cashDifference || 0),
-      0
-    );
-
+  const todaySummary = useMemo(() => {
     return {
-      totalShift: shifts.length,
-      runningShift,
-      closedShift,
-      branchOne,
-      branchTwo,
-      totalOpeningCash,
-      totalClosingCash,
-      totalSales,
-      totalTransactions,
-      totalDifference,
+      transaksi: activeShift ? 0 : 0,
+      penjualan: activeShift ? 0 : 0,
+      kasAwal: activeShift?.openingCash || 0,
     };
-  }, [shifts]);
+  }, [activeShift]);
 
-  const handleOpenShift = async () => {
-    if (!currentUser) {
-      alert("Data login tidak ditemukan. Silakan login ulang.");
-      return;
-    }
+  const handleStartShift = () => {
+    const cash = Number(openingCash || 0);
 
-    if (currentKasirShift) {
-      alert("Shift kamu masih berjalan. Tutup shift terlebih dahulu.");
-      return;
-    }
+    const newShift = {
+      id: Date.now(),
+      cashierName: currentUser?.name || currentUser?.username || "Kasir",
+      branch: currentUser?.branch || currentUser?.branch_name || "Cabang 1",
+      startedAt: new Date().toISOString(),
+      openingCash: cash,
+      status: "active",
+    };
 
-    if (!openingCash || Number(openingCash) < 0) {
-      alert("Masukkan kas awal dengan benar.");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      setErrorMessage("");
-
-      const payload = {
-        branch_id: getBranchIdByName(currentUser.branch),
-        cashier_name: currentUser.name,
-        username: currentUser.username,
-        shift_name: currentUser.shift || "Shift Pagi",
-        opening_cash: Number(openingCash),
-        note: openNote || null,
-      };
-
-      await openShift(payload);
-
-      setOpeningCash("");
-      setOpenNote("");
-
-      await fetchShifts();
-      await fetchCurrentShift(currentUser.username);
-
-      showSuccess("Shift berhasil dibuka dan tersimpan ke backend.");
-    } catch (error) {
-      alert(error.message || "Gagal membuka shift.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    setActiveShift(newShift);
+    setOpeningCash("");
   };
 
-  const handleCloseShift = async () => {
-    if (!currentKasirShift) {
-      alert("Tidak ada shift yang sedang berjalan.");
-      return;
-    }
+  const handleEndShift = () => {
+    if (!activeShift) return;
 
-    if (!closingCash || Number(closingCash) < 0) {
-      alert("Masukkan kas akhir dengan benar.");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      setErrorMessage("");
-
-      await closeShift(currentKasirShift.id, {
-        closing_cash: Number(closingCash),
-        note: closeNote || null,
-      });
-
-      setClosingCash("");
-      setCloseNote("");
-
-      await fetchShifts();
-      await fetchCurrentShift(currentUser.username);
-
-      showSuccess("Shift berhasil ditutup dan direkap oleh backend.");
-    } catch (error) {
-      alert(error.message || "Gagal menutup shift.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleOwnerForceClose = async (shift) => {
-    const defaultCash =
-      Number(shift.expectedCash || 0) > 0
-        ? Number(shift.expectedCash || 0)
-        : Number(shift.openingCash || 0) + Number(shift.totalSales || 0);
-
-    const closingCashInput = prompt(
-      `Masukkan kas akhir untuk menutup shift ${shift.cashierName}:`,
-      String(defaultCash)
-    );
-
-    if (closingCashInput === null) return;
-
-    if (closingCashInput === "" || Number(closingCashInput) < 0) {
-      alert("Kas akhir tidak valid.");
-      return;
-    }
-
-    const confirmClose = confirm("Yakin ingin menutup shift kasir ini?");
-
+    const confirmClose = confirm("Tutup shift sekarang?");
     if (!confirmClose) return;
 
-    try {
-      setErrorMessage("");
+    const closedShift = {
+      ...activeShift,
+      endedAt: new Date().toISOString(),
+      closingCash: Number(closingCash || 0),
+      status: "closed",
+    };
 
-      await closeShift(shift.id, {
-        closing_cash: Number(closingCashInput),
-        note: "Ditutup oleh owner",
-      });
-
-      await fetchShifts();
-
-      showSuccess("Shift kasir berhasil ditutup oleh owner.");
-    } catch (error) {
-      alert(error.message || "Gagal menutup shift kasir.");
-    }
-  };
-
-  const handleRefresh = async () => {
-    await fetchShifts();
-
-    if (isKasir) {
-      await fetchCurrentShift(currentUser.username);
-    }
-
-    showSuccess("Data shift berhasil diperbarui dari backend.");
+    setHistory((currentHistory) => [closedShift, ...currentHistory]);
+    setActiveShift(null);
+    setClosingCash("");
   };
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <PageHeader
-        title={isOwner ? "Shift Kasir" : "Shift Saya"}
-        description={
-          isOwner
-            ? "Monitoring shift kasir berdasarkan cabang, waktu, dan status shift dari backend."
-            : "Kelola buka shift, tutup shift, dan riwayat shift kerja kamu dari backend."
-        }
-      />
-
-      <div className="mb-6 flex flex-wrap justify-end gap-3">
-        <button
-          type="button"
-          onClick={handleRefresh}
-          className="rounded-xl border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-700 shadow-sm hover:bg-green-50"
-        >
-          Refresh Data
-        </button>
-      </div>
-
-      {successMessage && (
-        <div className="mb-5 rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-sm font-semibold text-green-700">
-          {successMessage}
-        </div>
-      )}
-
-      {errorMessage && (
-        <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
-          {errorMessage}
-        </div>
-      )}
-
-      {isKasir && (
-        <>
-          <div className="mb-6 grid gap-4 lg:grid-cols-3">
-            <div className="rounded-2xl bg-white p-5 shadow-sm lg:col-span-2">
-              <h3 className="text-lg font-bold text-slate-800">
+    <div className="min-h-screen bg-[#F3F4F6] px-4 py-5 sm:px-6 lg:px-8">
+      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <Card className="p-5">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">
                 Status Shift Saat Ini
-              </h3>
+              </h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Shift kasir aktif akan dipakai untuk mencatat transaksi.
+              </p>
+            </div>
 
-              {currentKasirShift ? (
-                <div className="mt-5 rounded-2xl border border-green-100 bg-green-50 p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-green-700">
-                        Shift sedang berjalan
-                      </p>
-                      <h4 className="mt-1 text-xl font-bold text-green-700">
-                        {currentKasirShift.shiftName}
-                      </h4>
-                    </div>
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-50 text-[#0B7FC3]">
+              <Clock3 className="h-5 w-5" />
+            </div>
+          </div>
 
-                    <span className="rounded-full bg-green-600 px-4 py-2 text-xs font-bold text-white">
-                      Berjalan
-                    </span>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <InfoBox label="Cabang" value={currentKasirShift.branch} />
-                    <InfoBox
-                      label="Jam Buka"
-                      value={formatDateTime(currentKasirShift.openTime)}
-                    />
-                    <InfoBox
-                      label="Kas Awal"
-                      value={formatRupiah(currentKasirShift.openingCash)}
-                      valueClass="text-blue-600"
-                    />
-                    <InfoBox
-                      label="Penjualan Sementara"
-                      value={formatRupiah(currentKasirShift.totalSales)}
-                      valueClass="text-green-600"
-                    />
-                  </div>
+          {activeShift ? (
+            <div className="rounded-[22px] border border-green-100 bg-green-50 p-5">
+              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-green-700">
+                    Shift sedang berjalan
+                  </p>
+                  <h3 className="mt-1 text-xl font-black text-gray-950">
+                    {activeShift.cashierName}
+                  </h3>
+                  <p className="mt-1 text-sm font-semibold text-gray-600">
+                    {activeShift.branch} • Mulai{" "}
+                    {formatDateTime(activeShift.startedAt)}
+                  </p>
                 </div>
-              ) : (
-                <div className="mt-5 rounded-2xl border border-yellow-100 bg-yellow-50 p-5">
-                  <p className="font-bold text-yellow-700">
+
+                <Badge variant="green">Aktif</Badge>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl bg-white p-4">
+                  <p className="text-xs font-bold text-gray-500">Kas Awal</p>
+                  <p className="mt-1 text-lg font-black text-gray-950">
+                    {formatRupiah(todaySummary.kasAwal)}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white p-4">
+                  <p className="text-xs font-bold text-gray-500">Transaksi</p>
+                  <p className="mt-1 text-lg font-black text-gray-950">
+                    {todaySummary.transaksi}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white p-4">
+                  <p className="text-xs font-bold text-gray-500">Penjualan</p>
+                  <p className="mt-1 text-lg font-black text-gray-950">
+                    {formatRupiah(todaySummary.penjualan)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-[22px] border border-orange-100 bg-orange-50 p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-orange-600">
+                  <LogIn className="h-5 w-5" />
+                </div>
+
+                <div>
+                  <p className="font-black text-gray-950">
                     Belum ada shift yang berjalan
                   </p>
-                  <p className="mt-1 text-sm text-yellow-700">
-                    Masukkan kas awal untuk membuka shift kerja.
+                  <p className="mt-1 text-sm font-semibold leading-relaxed text-gray-600">
+                    Mulai shift terlebih dahulu sebelum memproses transaksi
+                    kasir.
                   </p>
                 </div>
-              )}
-            </div>
-
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-800">Aksi Shift</h3>
-
-              <div className="mt-5 space-y-4">
-                {!currentKasirShift && (
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Kas Awal
-                    </label>
-                    <input
-                      type="number"
-                      value={openingCash}
-                      onChange={(event) => setOpeningCash(event.target.value)}
-                      placeholder="Contoh: 500000"
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                    />
-
-                    <label className="mb-2 mt-4 block text-sm font-semibold text-slate-700">
-                      Catatan Buka Shift
-                    </label>
-                    <textarea
-                      value={openNote}
-                      onChange={(event) => setOpenNote(event.target.value)}
-                      placeholder="Opsional"
-                      rows="3"
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                    />
-
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={handleOpenShift}
-                      className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-bold text-white ${
-                        isSubmitting
-                          ? "bg-slate-400"
-                          : "bg-blue-600 hover:bg-blue-700"
-                      }`}
-                    >
-                      {isSubmitting ? "Memproses..." : "Buka Shift"}
-                    </button>
-                  </div>
-                )}
-
-                {currentKasirShift && (
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Kas Akhir
-                    </label>
-                    <input
-                      type="number"
-                      value={closingCash}
-                      onChange={(event) => setClosingCash(event.target.value)}
-                      placeholder="Contoh: 1250000"
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                    />
-
-                    <label className="mb-2 mt-4 block text-sm font-semibold text-slate-700">
-                      Catatan Tutup Shift
-                    </label>
-                    <textarea
-                      value={closeNote}
-                      onChange={(event) => setCloseNote(event.target.value)}
-                      placeholder="Opsional"
-                      rows="3"
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                    />
-
-                    <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Kas Awal</span>
-                        <span className="font-bold text-slate-800">
-                          {formatRupiah(currentKasirShift.openingCash)}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 flex justify-between">
-                        <span className="text-slate-500">
-                          Penjualan Tercatat
-                        </span>
-                        <span className="font-bold text-green-600">
-                          {formatRupiah(currentKasirShift.totalSales)}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 flex justify-between border-t border-slate-200 pt-2">
-                        <span className="font-bold text-slate-700">
-                          Estimasi Kas
-                        </span>
-                        <span className="font-bold text-blue-600">
-                          {formatRupiah(
-                            currentKasirShift.openingCash +
-                              currentKasirShift.totalSales
-                          )}
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={handleCloseShift}
-                      className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-bold text-white ${
-                        isSubmitting
-                          ? "bg-slate-400"
-                          : "bg-red-600 hover:bg-red-700"
-                      }`}
-                    >
-                      {isSubmitting ? "Memproses..." : "Tutup Shift"}
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <h3 className="mb-4 text-lg font-bold text-slate-800">
-              Riwayat Shift Saya
-            </h3>
-
-            {isLoading ? (
-              <LoadingBox message="Mengambil riwayat shift dari backend..." />
-            ) : (
-              <ShiftTable
-                shifts={myShiftHistory}
-                isOwner={false}
-                onForceClose={handleOwnerForceClose}
-              />
-            )}
-          </div>
-        </>
-      )}
-
-      {isOwner && (
-        <>
-          <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <SummaryCard label="Total Shift" value={summary.totalShift} />
-            <SummaryCard
-              label="Shift Berjalan"
-              value={summary.runningShift}
-              valueClass="text-green-600"
-            />
-            <SummaryCard
-              label="Shift Selesai"
-              value={summary.closedShift}
-              valueClass="text-red-600"
-            />
-            <SummaryCard label="Cabang 1" value={summary.branchOne} />
-            <SummaryCard label="Cabang 2" value={summary.branchTwo} />
-          </div>
-
-          <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MoneySummaryCard
-              label="Total Kas Awal"
-              value={summary.totalOpeningCash}
-              valueClass="text-blue-600"
-            />
-
-            <MoneySummaryCard
-              label="Total Kas Akhir"
-              value={summary.totalClosingCash}
-              valueClass="text-green-600"
-            />
-
-            <MoneySummaryCard
-              label="Total Penjualan Shift"
-              value={summary.totalSales}
-              valueClass="text-purple-600"
-            />
-
-            <MoneySummaryCard
-              label="Selisih Kas"
-              value={summary.totalDifference}
-              valueClass={
-                summary.totalDifference >= 0 ? "text-green-600" : "text-red-600"
-              }
-            />
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">
-                  Monitoring Shift Kasir
-                </h3>
-                <p className="text-sm text-slate-500">
-                  Menampilkan seluruh shift kasir dari Cabang 1 dan Cabang 2.
-                </p>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-4">
-                <select
-                  value={selectedBranch}
-                  onChange={(event) => setSelectedBranch(event.target.value)}
-                  className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                >
-                  {branches.map((branch) => (
-                    <option key={branch} value={branch}>
-                      {branch}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={selectedStatus}
-                  onChange={(event) => setSelectedStatus(event.target.value)}
-                  className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                >
-                  {statuses.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(event) => setSelectedDate(event.target.value)}
-                  className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                />
-
-                <input
-                  type="text"
-                  value={searchKeyword}
-                  onChange={(event) => setSearchKeyword(event.target.value)}
-                  placeholder="Cari kasir..."
-                  className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            {isLoading ? (
-              <LoadingBox message="Mengambil data shift dari backend..." />
-            ) : (
-              <ShiftTable
-                shifts={filteredShifts}
-                isOwner={true}
-                onForceClose={handleOwnerForceClose}
-              />
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function InfoBox({ label, value, valueClass = "text-slate-800" }) {
-  return (
-    <div className="rounded-xl bg-white p-4">
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className={`mt-1 font-bold ${valueClass}`}>{value}</p>
-    </div>
-  );
-}
-
-function LoadingBox({ message }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500">
-      {message}
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, valueClass = "text-slate-800" }) {
-  return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <h3 className={`mt-2 text-2xl font-bold ${valueClass}`}>{value}</h3>
-    </div>
-  );
-}
-
-function MoneySummaryCard({ label, value, valueClass = "text-slate-800" }) {
-  return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <h3 className={`mt-2 text-2xl font-bold ${valueClass}`}>
-        {formatRupiah(value)}
-      </h3>
-    </div>
-  );
-}
-
-function ShiftTable({ shifts, isOwner, onForceClose }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1250px] border-collapse">
-        <thead>
-          <tr className="border-b border-slate-100 bg-slate-50 text-left text-sm text-slate-500">
-            <th className="px-4 py-4 font-semibold">Kasir</th>
-            <th className="px-4 py-4 font-semibold">Cabang</th>
-            <th className="px-4 py-4 font-semibold">Shift</th>
-            <th className="px-4 py-4 font-semibold">Jam Buka</th>
-            <th className="px-4 py-4 font-semibold">Jam Tutup</th>
-            <th className="px-4 py-4 font-semibold">Kas Awal</th>
-            <th className="px-4 py-4 font-semibold">Kas Akhir</th>
-            <th className="px-4 py-4 font-semibold">Penjualan</th>
-            <th className="px-4 py-4 font-semibold">Transaksi</th>
-            <th className="px-4 py-4 font-semibold">Selisih</th>
-            <th className="px-4 py-4 font-semibold">Status</th>
-            {isOwner && (
-              <th className="px-4 py-4 text-center font-semibold">Aksi</th>
-            )}
-          </tr>
-        </thead>
-
-        <tbody>
-          {shifts.length > 0 ? (
-            shifts.map((shift) => (
-              <tr
-                key={shift.id}
-                className="border-b border-slate-100 text-sm hover:bg-slate-50"
-              >
-                <td className="px-4 py-4">
-                  <p className="font-bold text-slate-800">
-                    {shift.cashierName}
-                  </p>
-                  <p className="text-xs text-slate-400">@{shift.username}</p>
-                </td>
-
-                <td className="px-4 py-4">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${
-                      shift.branch === "Cabang 1"
-                        ? "bg-blue-100 text-blue-700"
-                        : "bg-purple-100 text-purple-700"
-                    }`}
-                  >
-                    {shift.branch}
-                  </span>
-                </td>
-
-                <td className="px-4 py-4 text-slate-600">
-                  {shift.shiftName}
-                </td>
-
-                <td className="px-4 py-4 text-slate-600">
-                  {formatDateTime(shift.openTime)}
-                </td>
-
-                <td className="px-4 py-4 text-slate-600">
-                  {shift.closeTime ? formatDateTime(shift.closeTime) : "-"}
-                </td>
-
-                <td className="px-4 py-4 font-semibold text-blue-600">
-                  {formatRupiah(shift.openingCash)}
-                </td>
-
-                <td className="px-4 py-4 font-semibold text-green-600">
-                  {shift.closingCash !== null
-                    ? formatRupiah(shift.closingCash)
-                    : "-"}
-                </td>
-
-                <td className="px-4 py-4 font-semibold text-purple-600">
-                  {formatRupiah(shift.totalSales)}
-                </td>
-
-                <td className="px-4 py-4 text-slate-600">
-                  {shift.totalTransactions}
-                </td>
-
-                <td
-                  className={`px-4 py-4 font-semibold ${
-                    shift.cashDifference >= 0
-                      ? "text-green-600"
-                      : "text-red-600"
-                  }`}
-                >
-                  {shift.status === "Selesai"
-                    ? formatRupiah(shift.cashDifference)
-                    : "-"}
-                </td>
-
-                <td className="px-4 py-4">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${
-                      shift.status === "Berjalan"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {shift.status}
-                  </span>
-                </td>
-
-                {isOwner && (
-                  <td className="px-4 py-4 text-center">
-                    {shift.status === "Berjalan" ? (
-                      <button
-                        type="button"
-                        onClick={() => onForceClose(shift)}
-                        className="rounded-lg bg-yellow-50 px-3 py-2 text-xs font-bold text-yellow-700 hover:bg-yellow-100"
-                      >
-                        Tutup Shift
-                      </button>
-                    ) : (
-                      <span className="text-xs text-slate-400">Selesai</span>
-                    )}
-                  </td>
-                )}
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td
-                colSpan={isOwner ? "12" : "11"}
-                className="px-4 py-10 text-center text-sm text-slate-500"
-              >
-                Data shift tidak ditemukan.
-              </td>
-            </tr>
           )}
-        </tbody>
-      </table>
+        </Card>
+
+        <Card className="p-5">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">Aksi Shift</h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Buka atau tutup shift kerja kasir.
+              </p>
+            </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-50 text-[#0B7FC3]">
+              <WalletCards className="h-5 w-5" />
+            </div>
+          </div>
+
+          {!activeShift ? (
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-black text-gray-700">
+                  Kas Awal
+                </label>
+                <input
+                  type="number"
+                  value={openingCash}
+                  onChange={(event) => setOpeningCash(event.target.value)}
+                  placeholder="Masukkan kas awal"
+                  className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-800 outline-none transition focus:border-[#0B7FC3] focus:bg-white focus:ring-4 focus:ring-sky-100"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleStartShift}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0B7FC3] px-4 py-3 text-sm font-black text-white transition hover:bg-[#086da8]"
+              >
+                <LogIn className="h-4 w-4" />
+                Mulai Shift
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-black text-gray-700">
+                  Kas Akhir
+                </label>
+                <input
+                  type="number"
+                  value={closingCash}
+                  onChange={(event) => setClosingCash(event.target.value)}
+                  placeholder="Masukkan kas akhir"
+                  className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-800 outline-none transition focus:border-red-500 focus:bg-white focus:ring-4 focus:ring-red-100"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleEndShift}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-black text-white transition hover:bg-red-700"
+              >
+                <LogOut className="h-4 w-4" />
+                Tutup Shift
+              </button>
+            </div>
+          )}
+
+          <p className="mt-4 text-xs font-medium leading-relaxed text-gray-400">
+            Data shift saat ini masih diproses di tampilan. Penyimpanan ke
+            backend akan disambungkan setelah alur POS stabil.
+          </p>
+        </Card>
+
+        <Card className="p-5 xl:col-span-2">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">
+                Riwayat Shift
+              </h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Shift yang sudah ditutup akan muncul di daftar ini.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-gray-200">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">Kasir</th>
+                  <th className="px-4 py-3">Cabang</th>
+                  <th className="px-4 py-3">Mulai</th>
+                  <th className="px-4 py-3">Selesai</th>
+                  <th className="px-4 py-3 text-right">Kas Awal</th>
+                  <th className="px-4 py-3 text-right">Kas Akhir</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-gray-100">
+                {history.map((item) => (
+                  <tr key={item.id} className="bg-white">
+                    <td className="px-4 py-3 font-black text-gray-950">
+                      {item.cashierName}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {item.branch}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {formatDateTime(item.startedAt)}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {formatDateTime(item.endedAt)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-black text-gray-950">
+                      {formatRupiah(item.openingCash)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-black text-gray-950">
+                      {formatRupiah(item.closingCash)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="gray">Ditutup</Badge>
+                    </td>
+                  </tr>
+                ))}
+
+                {history.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan="7"
+                      className="px-4 py-8 text-center font-semibold text-gray-500"
+                    >
+                      Belum ada riwayat shift.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

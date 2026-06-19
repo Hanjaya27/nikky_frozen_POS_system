@@ -1,1106 +1,733 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  Download,
+  FileText,
+  PackageCheck,
+  RefreshCw,
+  ReceiptText,
+  TrendingUp,
+  WalletCards,
+} from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
-import PageHeader from "../../components/PageHeader";
-import { getExpenses, getTransactions } from "../../services/api";
-
-const branches = ["Semua", "Cabang 1", "Cabang 2"];
-
-const periods = [
-  { value: "all", label: "Semua Periode" },
-  { value: "today", label: "Hari Ini" },
-  { value: "7days", label: "7 Hari Terakhir" },
-  { value: "30days", label: "30 Hari Terakhir" },
-  { value: "custom", label: "Custom Tanggal" },
+const transactions = [
+  {
+    id: 1,
+    invoice: "TRX-001",
+    date: new Date().toISOString(),
+    branch: "Cabang 1",
+    cashier: "Kasir 1",
+    payment: "Tunai",
+    status: "Lunas",
+    total: 120000,
+    items: [{ name: "Nugget Ayam", qty: 2 }],
+  },
+  {
+    id: 2,
+    invoice: "TRX-002",
+    date: new Date().toISOString(),
+    branch: "Cabang 2",
+    cashier: "Kasir 2",
+    payment: "QRIS",
+    status: "Lunas",
+    total: 85000,
+    items: [{ name: "Sosis Sapi", qty: 1 }],
+  },
+  {
+    id: 3,
+    invoice: "TRX-003",
+    date: new Date(Date.now() - 86400000).toISOString(),
+    branch: "Cabang 1",
+    cashier: "Kasir 1",
+    payment: "Transfer",
+    status: "Lunas",
+    total: 450000,
+    items: [{ name: "Chicken Wings", qty: 3 }],
+  },
+  {
+    id: 4,
+    invoice: "TRX-004",
+    date: new Date(Date.now() - 2 * 86400000).toISOString(),
+    branch: "Cabang 2",
+    cashier: "Kasir 2",
+    payment: "QRIS",
+    status: "Lunas",
+    total: 210000,
+    items: [{ name: "Beef Slice", qty: 2 }],
+  },
 ];
 
-function formatRupiah(value) {
+const expenses = [
+  {
+    id: 1,
+    date: new Date().toISOString(),
+    branch: "Cabang 1",
+    category: "Operasional",
+    description: "Belanja operasional toko",
+    amount: 250000,
+  },
+  {
+    id: 2,
+    date: new Date(Date.now() - 86400000).toISOString(),
+    branch: "Cabang 2",
+    category: "Listrik",
+    description: "Bayar listrik toko",
+    amount: 850000,
+  },
+  {
+    id: 3,
+    date: new Date(Date.now() - 2 * 86400000).toISOString(),
+    branch: "Cabang 1",
+    category: "Kemasan",
+    description: "Plastik dan kantong belanja",
+    amount: 120000,
+  },
+];
+
+const periodOptions = [
+  { id: "today", label: "Hari Ini" },
+  { id: "week", label: "7 Hari" },
+  { id: "month", label: "Bulan Ini" },
+];
+
+const branchOptions = [
+  { id: "all", label: "Semua Cabang" },
+  { id: "Cabang 1", label: "Cabang 1" },
+  { id: "Cabang 2", label: "Cabang 2" },
+];
+
+const tabs = [
+  { id: "ringkasan", label: "Ringkasan" },
+  { id: "transaksi", label: "Transaksi" },
+  { id: "pengeluaran", label: "Pengeluaran" },
+];
+
+function rupiah(value) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: 0,
-  }).format(value || 0);
+  }).format(Number(value || 0));
 }
 
-function formatNumber(value) {
-  return new Intl.NumberFormat("id-ID").format(value || 0);
-}
+function shortRupiah(value) {
+  const number = Number(value || 0);
 
-function getSavedData(key, fallbackData) {
-  const savedData = localStorage.getItem(key);
-
-  if (!savedData) {
-    return fallbackData;
+  if (number >= 1000000) {
+    return `Rp ${(number / 1000000).toFixed(1).replace(".", ",")}jt`;
   }
 
-  try {
-    return JSON.parse(savedData);
-  } catch (error) {
-    localStorage.removeItem(key);
-    return fallbackData;
+  if (number >= 1000) {
+    return `Rp ${Math.round(number / 1000)}rb`;
   }
+
+  return `Rp ${number}`;
 }
 
-function getBranchIdByName(branchName) {
-  if (branchName === "Cabang 1") return 1;
-  if (branchName === "Cabang 2") return 2;
-
-  return null;
-}
-
-function getBranchNameById(branchId) {
-  if (Number(branchId) === 1) return "Cabang 1";
-  if (Number(branchId) === 2) return "Cabang 2";
-
-  return "-";
-}
-
-function getTodayDateKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function getDateBefore(days) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-
-  return date.toISOString().slice(0, 10);
-}
-
-function formatDateKey(dateString) {
-  if (!dateString) return "";
-
-  return String(dateString).slice(0, 10);
-}
-
-function formatDateLabel(dateString) {
-  if (!dateString) return "-";
-
-  const date = new Date(`${String(dateString).slice(0, 10)}T00:00:00`);
-
-  return date.toLocaleDateString("id-ID", {
+function formatDate(dateString) {
+  return new Date(dateString).toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
 }
 
-function formatTimeOnly(dateString) {
-  if (!dateString) return "-";
-
-  const date = new Date(dateString);
-
-  return date.toLocaleTimeString("id-ID", {
+function formatTime(dateString) {
+  return new Date(dateString).toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
-function isDateInRange(dateKey, startDate, endDate) {
-  if (!dateKey) return false;
+function getRange(period) {
+  const now = new Date();
+  const start = new Date(now);
+  const end = new Date(now);
 
-  if (startDate && dateKey < startDate) {
-    return false;
+  end.setHours(23, 59, 59, 999);
+
+  if (period === "today") {
+    start.setHours(0, 0, 0, 0);
   }
 
-  if (endDate && dateKey > endDate) {
-    return false;
+  if (period === "week") {
+    start.setDate(now.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
   }
 
-  return true;
+  if (period === "month") {
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+  }
+
+  return { start, end };
 }
 
-function normalizeTransaction(transaction) {
-  return {
-    id: transaction.id,
-    invoiceNumber: transaction.invoice_number,
-    transactionDate: transaction.transaction_date,
-    dateKey: formatDateKey(transaction.transaction_date),
-    cashierName: transaction.cashier_name,
-    username: transaction.username,
-    branch_id: transaction.branch_id,
-    branch: transaction.branch?.name || getBranchNameById(transaction.branch_id),
-    shift: transaction.shift_name || "-",
-    paymentMethod: transaction.payment_method,
-    status: transaction.status,
-    totalItem: Number(transaction.total_item || 0),
-    subtotal: Number(transaction.subtotal || 0),
-    discount: Number(transaction.discount || 0),
-    tax: Number(transaction.tax || 0),
-    taxRate: Number(transaction.tax_rate || 0),
-    grandTotal: Number(transaction.grand_total || 0),
-    paidAmount: Number(transaction.paid_amount || 0),
-    changeAmount: Number(transaction.change_amount || 0),
-    items: (transaction.items || []).map((item) => ({
-      id: item.id,
-      product_id: item.product_id,
-      code: item.product_code,
-      name: item.product_name,
-      category: item.category,
-      price: Number(item.price || 0),
-      quantity: Number(item.quantity || 0),
-      subtotal: Number(item.subtotal || 0),
-    })),
-  };
+function inPeriod(dateString, period) {
+  const date = new Date(dateString);
+  const { start, end } = getRange(period);
+
+  return date >= start && date <= end;
 }
 
-function normalizeExpense(expense) {
-  return {
-    id: expense.id,
-    date: expense.expense_date,
-    dateKey: formatDateKey(expense.expense_date),
-    branch_id: expense.branch_id,
-    branch: expense.branch?.name || getBranchNameById(expense.branch_id),
-    category: expense.category || "Operasional",
-    description: expense.description || "-",
-    amount: Number(expense.amount || 0),
-    user: expense.user_name || expense.username || "User",
-    username: expense.username || "-",
-    status: expense.status || "Aktif",
+function dateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+
+  return `${y}-${m}-${d}`;
+}
+
+function Card({ children, className = "" }) {
+  return (
+    <div className={`rounded-[22px] border border-gray-200 bg-white shadow-sm ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function StatCard({ title, value, caption, icon: Icon, tone = "blue" }) {
+  const tones = {
+    blue: "bg-sky-50 text-[#0B7FC3]",
+    green: "bg-green-50 text-green-600",
+    red: "bg-red-50 text-red-600",
+    orange: "bg-orange-50 text-orange-600",
   };
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-gray-500">{title}</p>
+          <h3 className="mt-2 text-2xl font-black text-gray-950">{value}</h3>
+          <p className="mt-3 text-xs font-medium leading-relaxed text-gray-500">
+            {caption}
+          </p>
+        </div>
+
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${tones[tone]}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function Badge({ children, variant = "gray" }) {
+  const variants = {
+    green: "bg-green-50 text-green-700 ring-green-100",
+    orange: "bg-orange-50 text-orange-700 ring-orange-100",
+    red: "bg-red-50 text-red-700 ring-red-100",
+    blue: "bg-sky-50 text-[#0B7FC3] ring-sky-100",
+    gray: "bg-gray-50 text-gray-600 ring-gray-100",
+  };
+
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-black ring-1 ${variants[variant]}`}>
+      {children}
+    </span>
+  );
 }
 
 function LaporanPage() {
-  const [currentUser, setCurrentUser] = useState(null);
-
-  const [transactions, setTransactions] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-
-  const [selectedBranch, setSelectedBranch] = useState("Semua");
-  const [selectedPeriod, setSelectedPeriod] = useState("all");
-  const [startDate, setStartDate] = useState(getDateBefore(7));
-  const [endDate, setEndDate] = useState(getTodayDateKey());
-  const [activeTab, setActiveTab] = useState("pendapatan");
-
-  const [isLoading, setIsLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-
-  useEffect(() => {
-    const savedUser = getSavedData("nikky_user", null);
-
-    if (savedUser) {
-      setCurrentUser(savedUser);
-
-      if (savedUser.role === "kasir") {
-        setSelectedBranch(savedUser.branch || "Cabang 1");
-      }
-    }
-  }, []);
-
-  const isOwner = currentUser?.role === "owner";
-
-  const activeBranchId = useMemo(() => {
-    if (currentUser?.role === "kasir") {
-      return getBranchIdByName(currentUser.branch);
-    }
-
-    if (selectedBranch !== "Semua") {
-      return getBranchIdByName(selectedBranch);
-    }
-
-    return null;
-  }, [currentUser, selectedBranch]);
-
-  const dateRange = useMemo(() => {
-    const today = getTodayDateKey();
-
-    if (selectedPeriod === "today") {
-      return {
-        start: today,
-        end: today,
-      };
-    }
-
-    if (selectedPeriod === "7days") {
-      return {
-        start: getDateBefore(6),
-        end: today,
-      };
-    }
-
-    if (selectedPeriod === "30days") {
-      return {
-        start: getDateBefore(29),
-        end: today,
-      };
-    }
-
-    if (selectedPeriod === "custom") {
-      return {
-        start: startDate || null,
-        end: endDate || null,
-      };
-    }
-
-    return {
-      start: null,
-      end: null,
-    };
-  }, [selectedPeriod, startDate, endDate]);
-
-  const fetchReportData = async () => {
-    try {
-      setIsLoading(true);
-      setErrorMessage("");
-
-      const transactionParams = {};
-      const expenseParams = {};
-
-      if (activeBranchId) {
-        transactionParams.branch_id = activeBranchId;
-        expenseParams.branch_id = activeBranchId;
-      }
-
-      const [transactionData, expenseData] = await Promise.all([
-        getTransactions(transactionParams),
-        getExpenses(expenseParams),
-      ]);
-
-      const normalizedTransactions = transactionData.map(normalizeTransaction);
-      const normalizedExpenses = expenseData.map(normalizeExpense);
-
-      setTransactions(normalizedTransactions);
-      setExpenses(normalizedExpenses);
-    } catch (error) {
-      setErrorMessage(
-        error.message ||
-          "Gagal mengambil data laporan dari backend. Pastikan Laravel server berjalan."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!currentUser) return;
-
-    fetchReportData();
-  }, [currentUser, activeBranchId]);
+  const [period, setPeriod] = useState("month");
+  const [branch, setBranch] = useState("all");
+  const [activeTab, setActiveTab] = useState("ringkasan");
 
   const filteredTransactions = useMemo(() => {
-    return transactions.filter((transaction) => {
-      const matchDate = isDateInRange(
-        transaction.dateKey,
-        dateRange.start,
-        dateRange.end
-      );
-
-      const matchStatus = transaction.status === "Berhasil";
-
-      return matchDate && matchStatus;
-    });
-  }, [transactions, dateRange]);
+    return transactions
+      .filter((item) => inPeriod(item.date, period))
+      .filter((item) => branch === "all" || item.branch === branch);
+  }, [period, branch]);
 
   const filteredExpenses = useMemo(() => {
-    return expenses.filter((expense) => {
-      const matchDate = isDateInRange(
-        expense.dateKey,
-        dateRange.start,
-        dateRange.end
-      );
+    return expenses
+      .filter((item) => inPeriod(item.date, period))
+      .filter((item) => branch === "all" || item.branch === branch);
+  }, [period, branch]);
 
-      const matchStatus = expense.status === "Aktif";
-
-      return matchDate && matchStatus;
-    });
-  }, [expenses, dateRange]);
-
-  const totalTransactions = filteredTransactions.length;
-
-  const totalIncome = filteredTransactions.reduce(
-    (total, transaction) => total + Number(transaction.grandTotal || 0),
-    0
-  );
-
-  const totalSubtotal = filteredTransactions.reduce(
-    (total, transaction) => total + Number(transaction.subtotal || 0),
-    0
-  );
-
-  const totalTax = filteredTransactions.reduce(
-    (total, transaction) => total + Number(transaction.tax || 0),
-    0
-  );
-
-  const totalDiscount = filteredTransactions.reduce(
-    (total, transaction) => total + Number(transaction.discount || 0),
-    0
-  );
-
-  const totalItemsSold = filteredTransactions.reduce(
-    (total, transaction) => total + Number(transaction.totalItem || 0),
+  const totalRevenue = filteredTransactions.reduce(
+    (sum, item) => sum + item.total,
     0
   );
 
   const totalExpense = filteredExpenses.reduce(
-    (total, expense) => total + Number(expense.amount || 0),
+    (sum, item) => sum + item.amount,
     0
   );
 
-  const grossProfit = totalIncome - totalExpense;
+  const grossProfit = totalRevenue - totalExpense;
 
-  const averageTransaction =
-    totalTransactions > 0 ? Math.round(totalIncome / totalTransactions) : 0;
+  const dailyChart = useMemo(() => {
+    const { start, end } = getRange(period);
+    const result = [];
+    const cursor = new Date(start);
 
-  const paymentSummary = useMemo(() => {
-    const methods = ["Tunai", "QRIS", "Debit", "Transfer"];
+    while (cursor <= end) {
+      result.push({
+        key: dateKey(cursor),
+        label: cursor.toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "short",
+        }),
+        pendapatan: 0,
+        pengeluaran: 0,
+      });
 
-    return methods.map((method) => {
-      const methodTransactions = filteredTransactions.filter(
-        (transaction) => transaction.paymentMethod === method
-      );
+      cursor.setDate(cursor.getDate() + 1);
+    }
 
-      const total = methodTransactions.reduce(
-        (sum, transaction) => sum + Number(transaction.grandTotal || 0),
-        0
-      );
-
-      return {
-        method,
-        count: methodTransactions.length,
-        total,
-        percentage:
-          totalIncome > 0 ? Math.round((total / totalIncome) * 100) : 0,
-      };
-    });
-  }, [filteredTransactions, totalIncome]);
-
-  const branchSummary = useMemo(() => {
-    return ["Cabang 1", "Cabang 2"].map((branch) => {
-      const branchTransactions = filteredTransactions.filter(
-        (transaction) => transaction.branch === branch
-      );
-
-      const branchExpenses = filteredExpenses.filter(
-        (expense) => expense.branch === branch
-      );
-
-      const income = branchTransactions.reduce(
-        (total, transaction) => total + Number(transaction.grandTotal || 0),
-        0
-      );
-
-      const expense = branchExpenses.reduce(
-        (total, item) => total + Number(item.amount || 0),
-        0
-      );
-
-      return {
-        branch,
-        transactions: branchTransactions.length,
-        income,
-        expense,
-        profit: income - expense,
-      };
-    });
-  }, [filteredTransactions, filteredExpenses]);
-
-  const dailyReports = useMemo(() => {
-    const dateKeys = new Set();
-
-    filteredTransactions.forEach((transaction) => {
-      dateKeys.add(transaction.dateKey);
+    filteredTransactions.forEach((item) => {
+      const point = result.find((row) => row.key === dateKey(new Date(item.date)));
+      if (point) point.pendapatan += item.total;
     });
 
-    filteredExpenses.forEach((expense) => {
-      dateKeys.add(expense.dateKey);
+    filteredExpenses.forEach((item) => {
+      const point = result.find((row) => row.key === dateKey(new Date(item.date)));
+      if (point) point.pengeluaran += item.amount;
     });
 
-    const sortedDates = Array.from(dateKeys).sort();
+    return result;
+  }, [filteredTransactions, filteredExpenses, period]);
 
-    return sortedDates.map((dateKey) => {
-      const income = filteredTransactions
-        .filter((transaction) => transaction.dateKey === dateKey)
-        .reduce(
-          (total, transaction) => total + Number(transaction.grandTotal || 0),
-          0
-        );
+  const branchReport = useMemo(() => {
+    return ["Cabang 1", "Cabang 2"].map((branchName) => {
+      const revenue = filteredTransactions
+        .filter((item) => item.branch === branchName)
+        .reduce((sum, item) => sum + item.total, 0);
 
       const expense = filteredExpenses
-        .filter((item) => item.dateKey === dateKey)
-        .reduce((total, item) => total + Number(item.amount || 0), 0);
+        .filter((item) => item.branch === branchName)
+        .reduce((sum, item) => sum + item.amount, 0);
 
       return {
-        dateKey,
-        income,
-        expense,
-        profit: income - expense,
+        branch: branchName,
+        pendapatan: revenue,
+        pengeluaran: expense,
+        laba: revenue - expense,
       };
     });
   }, [filteredTransactions, filteredExpenses]);
 
-  const latestTransactions = filteredTransactions.slice(0, 5);
-  const latestExpenses = filteredExpenses.slice(0, 5);
+  const topProducts = useMemo(() => {
+    const map = {};
 
-  const maxDailyValue = Math.max(
-    ...dailyReports.map((item) => Math.max(item.income, item.expense)),
-    1
-  );
+    filteredTransactions.forEach((transaction) => {
+      transaction.items.forEach((item) => {
+        if (!map[item.name]) {
+          map[item.name] = {
+            name: item.name,
+            qty: 0,
+          };
+        }
 
-  const showSuccess = (message) => {
-    setSuccessMessage(message);
+        map[item.name].qty += item.qty;
+      });
+    });
 
-    setTimeout(() => {
-      setSuccessMessage("");
-    }, 2500);
-  };
+    const result = Object.values(map).sort((a, b) => b.qty - a.qty);
 
-  const handleRefresh = async () => {
-    await fetchReportData();
-    showSuccess("Data laporan berhasil diperbarui dari backend.");
-  };
-
-  const handlePrintReport = () => {
-    window.print();
-  };
-
-  const periodLabel =
-    periods.find((period) => period.value === selectedPeriod)?.label ||
-    "Semua Periode";
+    return result.length > 0 ? result : [{ name: "Belum ada data", qty: 0 }];
+  }, [filteredTransactions]);
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <PageHeader
-        title="Laporan"
-        description="Analisis pendapatan, pengeluaran, transaksi, dan performa cabang berdasarkan data backend."
-      />
-
-      <div className="mb-6 flex flex-wrap justify-end gap-3">
-        <button
-          type="button"
-          onClick={handleRefresh}
-          className="rounded-xl border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-700 shadow-sm hover:bg-green-50"
-        >
-          Refresh Data
-        </button>
-
-        <button
-          type="button"
-          onClick={handlePrintReport}
-          className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
-        >
-          Cetak Laporan
-        </button>
-      </div>
-
-      {successMessage && (
-        <div className="mb-5 rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-sm font-semibold text-green-700">
-          {successMessage}
-        </div>
-      )}
-
-      {errorMessage && (
-        <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
-          {errorMessage}
-        </div>
-      )}
-
-      <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
-        <div className="mb-4">
-          <h3 className="text-lg font-bold text-slate-800">Filter Laporan</h3>
-          <p className="text-sm text-slate-500">
-            Periode aktif: {periodLabel}
+    <div className="min-h-screen bg-[#F3F4F6] px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-gray-950 sm:text-3xl">
+            Laporan
+          </h1>
+          <p className="mt-1 text-sm font-medium text-gray-500">
+            Pantau pendapatan, pengeluaran, transaksi, dan performa cabang.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-600">
-              Cabang
-            </label>
-            <select
-              value={selectedBranch}
-              disabled={!isOwner}
-              onChange={(event) => setSelectedBranch(event.target.value)}
-              className={`w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 ${
-                !isOwner ? "bg-slate-100 text-slate-400" : ""
-              }`}
-            >
-              {branches.map((branch) => (
-                <option key={branch} value={branch}>
-                  {branch}
-                </option>
-              ))}
-            </select>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="grid grid-cols-3 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
+            {periodOptions.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setPeriod(item.id)}
+                className={`rounded-xl px-3 py-2 text-xs font-black transition sm:px-4 ${
+                  period === item.id
+                    ? "bg-[#0B7FC3] text-white shadow-sm"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-600">
-              Periode
-            </label>
-            <select
-              value={selectedPeriod}
-              onChange={(event) => setSelectedPeriod(event.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-            >
-              {periods.map((period) => (
-                <option key={period.value} value={period.value}>
-                  {period.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={branch}
+            onChange={(event) => setBranch(event.target.value)}
+            className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 shadow-sm outline-none focus:border-[#0B7FC3]"
+          >
+            {branchOptions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
 
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-600">
-              Tanggal Mulai
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              disabled={selectedPeriod !== "custom"}
-              onChange={(event) => setStartDate(event.target.value)}
-              className={`w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 ${
-                selectedPeriod !== "custom" ? "bg-slate-100 text-slate-400" : ""
-              }`}
-            />
-          </div>
+          <button
+            type="button"
+            className="flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-700 shadow-sm transition hover:bg-gray-50"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
 
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-600">
-              Tanggal Akhir
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              disabled={selectedPeriod !== "custom"}
-              onChange={(event) => setEndDate(event.target.value)}
-              className={`w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 ${
-                selectedPeriod !== "custom" ? "bg-slate-100 text-slate-400" : ""
-              }`}
-            />
-          </div>
+          <button
+            type="button"
+            className="flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-700 shadow-sm transition hover:bg-gray-50"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </button>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-          Mengambil data laporan dari backend...
+      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Total Pendapatan"
+          value={rupiah(totalRevenue)}
+          caption="Dari transaksi lunas pada periode terpilih."
+          icon={ArrowUpRight}
+          tone="green"
+        />
+
+        <StatCard
+          title="Total Pengeluaran"
+          value={rupiah(totalExpense)}
+          caption="Pengeluaran aktif yang tercatat."
+          icon={ArrowDownRight}
+          tone="red"
+        />
+
+        <StatCard
+          title="Laba Kotor"
+          value={rupiah(grossProfit)}
+          caption="Pendapatan dikurangi pengeluaran."
+          icon={TrendingUp}
+          tone={grossProfit >= 0 ? "blue" : "red"}
+        />
+
+        <StatCard
+          title="Total Transaksi"
+          value={filteredTransactions.length}
+          caption="Jumlah transaksi berhasil."
+          icon={ReceiptText}
+          tone="orange"
+        />
+      </div>
+
+      <Card className="mb-5 p-2">
+        <div className="flex gap-2 overflow-x-auto">
+          {tabs.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveTab(item.id)}
+              className={`shrink-0 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                activeTab === item.id
+                  ? "bg-[#0B7FC3] text-white shadow-sm"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
-      ) : (
-        <>
-          <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Total Transaksi</p>
-              <h3 className="mt-2 text-2xl font-bold text-purple-600">
-                {formatNumber(totalTransactions)}
-              </h3>
-              <p className="mt-1 text-xs text-slate-400">
-                Transaksi berhasil
-              </p>
-            </div>
+      </Card>
 
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Total Pendapatan</p>
-              <h3 className="mt-2 text-2xl font-bold text-blue-600">
-                {formatRupiah(totalIncome)}
-              </h3>
-              <p className="mt-1 text-xs text-slate-400">
-                Dari /api/transactions
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Total Pengeluaran</p>
-              <h3 className="mt-2 text-2xl font-bold text-red-600">
-                {formatRupiah(totalExpense)}
-              </h3>
-              <p className="mt-1 text-xs text-slate-400">
-                Dari /api/expenses
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Laba Kotor</p>
-              <h3
-                className={`mt-2 text-2xl font-bold ${
-                  grossProfit >= 0 ? "text-green-600" : "text-red-600"
-                }`}
-              >
-                {formatRupiah(grossProfit)}
-              </h3>
-              <p className="mt-1 text-xs text-slate-400">
-                Pendapatan - pengeluaran
-              </p>
-            </div>
-          </div>
-
-          <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Subtotal</p>
-              <h3 className="mt-2 text-xl font-bold text-slate-800">
-                {formatRupiah(totalSubtotal)}
-              </h3>
-            </div>
-
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Total PPN</p>
-              <h3 className="mt-2 text-xl font-bold text-purple-600">
-                {formatRupiah(totalTax)}
-              </h3>
-            </div>
-
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Total Diskon</p>
-              <h3 className="mt-2 text-xl font-bold text-orange-600">
-                {formatRupiah(totalDiscount)}
-              </h3>
-            </div>
-
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Rata-rata Transaksi</p>
-              <h3 className="mt-2 text-xl font-bold text-slate-800">
-                {formatRupiah(averageTransaction)}
-              </h3>
-            </div>
-          </div>
-
-          <div className="mb-6 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab("pendapatan")}
-              className={`rounded-xl px-4 py-2 text-sm font-bold ${
-                activeTab === "pendapatan"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              Pendapatan
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("pengeluaran")}
-              className={`rounded-xl px-4 py-2 text-sm font-bold ${
-                activeTab === "pengeluaran"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              Pengeluaran
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("perbandingan")}
-              className={`rounded-xl px-4 py-2 text-sm font-bold ${
-                activeTab === "perbandingan"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              Perbandingan
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("ringkasan")}
-              className={`rounded-xl px-4 py-2 text-sm font-bold ${
-                activeTab === "ringkasan"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              Ringkasan Cabang
-            </button>
-          </div>
-
-          {activeTab === "pendapatan" && (
-            <div className="grid gap-6 xl:grid-cols-3">
-              <section className="xl:col-span-2 rounded-2xl bg-white p-5 shadow-sm">
-                <div className="mb-5">
-                  <h3 className="text-lg font-bold text-slate-800">
-                    Pendapatan Harian
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Ringkasan pendapatan berdasarkan tanggal transaksi.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  {dailyReports.map((item) => (
-                    <div key={item.dateKey}>
-                      <div className="mb-2 flex justify-between text-sm">
-                        <span className="font-semibold text-slate-700">
-                          {formatDateLabel(item.dateKey)}
-                        </span>
-                        <span className="font-bold text-blue-600">
-                          {formatRupiah(item.income)}
-                        </span>
-                      </div>
-
-                      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className="h-full rounded-full bg-blue-600"
-                          style={{
-                            width: `${Math.max(
-                              (item.income / maxDailyValue) * 100,
-                              item.income > 0 ? 5 : 0
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-
-                  {dailyReports.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                      Belum ada data pendapatan pada periode ini.
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <aside className="rounded-2xl bg-white p-5 shadow-sm">
-                <div className="mb-5">
-                  <h3 className="text-lg font-bold text-slate-800">
-                    Metode Pembayaran
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Distribusi pembayaran transaksi.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  {paymentSummary.map((item) => (
-                    <div
-                      key={item.method}
-                      className="rounded-2xl border border-slate-100 p-4"
-                    >
-                      <div className="mb-2 flex justify-between text-sm">
-                        <span className="font-bold text-slate-800">
-                          {item.method}
-                        </span>
-                        <span className="font-semibold text-slate-500">
-                          {item.count} transaksi
-                        </span>
-                      </div>
-
-                      <div className="mb-2 h-2 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className="h-full rounded-full bg-green-500"
-                          style={{ width: `${item.percentage}%` }}
-                        />
-                      </div>
-
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">
-                          {item.percentage}%
-                        </span>
-                        <span className="font-bold text-green-600">
-                          {formatRupiah(item.total)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </aside>
-            </div>
-          )}
-
-          {activeTab === "pengeluaran" && (
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <div className="mb-5">
-                <h3 className="text-lg font-bold text-slate-800">
-                  Data Pengeluaran
-                </h3>
-                <p className="text-sm text-slate-500">
-                  Data pengeluaran diambil langsung dari backend expenses.
-                </p>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50 text-left text-sm text-slate-500">
-                      <th className="px-4 py-4 font-semibold">Tanggal</th>
-                      <th className="px-4 py-4 font-semibold">Cabang</th>
-                      <th className="px-4 py-4 font-semibold">Kategori</th>
-                      <th className="px-4 py-4 font-semibold">Deskripsi</th>
-                      <th className="px-4 py-4 font-semibold">Pengguna</th>
-                      <th className="px-4 py-4 text-right font-semibold">
-                        Nominal
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {filteredExpenses.map((expense) => (
-                      <tr
-                        key={expense.id}
-                        className="border-b border-slate-100 text-sm hover:bg-slate-50"
-                      >
-                        <td className="px-4 py-4 text-slate-600">
-                          {formatDateLabel(expense.dateKey)}
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-bold ${
-                              expense.branch === "Cabang 1"
-                                ? "bg-blue-100 text-blue-700"
-                                : "bg-purple-100 text-purple-700"
-                            }`}
-                          >
-                            {expense.branch}
-                          </span>
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
-                            {expense.category}
-                          </span>
-                        </td>
-
-                        <td className="px-4 py-4 text-slate-600">
-                          {expense.description}
-                        </td>
-
-                        <td className="px-4 py-4 text-slate-600">
-                          {expense.user}
-                        </td>
-
-                        <td className="px-4 py-4 text-right font-bold text-red-600">
-                          {formatRupiah(expense.amount)}
-                        </td>
-                      </tr>
-                    ))}
-
-                    {filteredExpenses.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan="6"
-                          className="px-4 py-10 text-center text-sm text-slate-500"
-                        >
-                          Belum ada data pengeluaran pada periode ini.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "perbandingan" && (
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <div className="mb-5">
-                <h3 className="text-lg font-bold text-slate-800">
+      {activeTab === "ringkasan" && (
+        <div className="grid gap-4 xl:grid-cols-[1.45fr_1fr]">
+          <Card className="p-5">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-black text-gray-950">
                   Pendapatan vs Pengeluaran
-                </h3>
-                <p className="text-sm text-slate-500">
-                  Perbandingan harian berdasarkan data backend.
+                </h2>
+                <p className="mt-1 text-sm font-medium text-gray-500">
+                  Ringkasan harian berdasarkan periode dan cabang terpilih.
                 </p>
               </div>
 
-              <div className="space-y-5">
-                {dailyReports.map((item) => (
-                  <div
-                    key={item.dateKey}
-                    className="rounded-2xl border border-slate-100 p-4"
-                  >
-                    <div className="mb-3 flex justify-between text-sm">
-                      <span className="font-bold text-slate-800">
-                        {formatDateLabel(item.dateKey)}
-                      </span>
-                      <span
-                        className={`font-bold ${
-                          item.profit >= 0 ? "text-green-600" : "text-red-600"
-                        }`}
-                      >
-                        Laba: {formatRupiah(item.profit)}
-                      </span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div>
-                        <div className="mb-1 flex justify-between text-xs text-slate-500">
-                          <span>Pendapatan</span>
-                          <span>{formatRupiah(item.income)}</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className="h-full rounded-full bg-green-500"
-                            style={{
-                              width: `${Math.max(
-                                (item.income / maxDailyValue) * 100,
-                                item.income > 0 ? 5 : 0
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="mb-1 flex justify-between text-xs text-slate-500">
-                          <span>Pengeluaran</span>
-                          <span>{formatRupiah(item.expense)}</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className="h-full rounded-full bg-red-500"
-                            style={{
-                              width: `${Math.max(
-                                (item.expense / maxDailyValue) * 100,
-                                item.expense > 0 ? 5 : 0
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {dailyReports.length === 0 && (
-                  <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                    Belum ada data perbandingan pada periode ini.
-                  </div>
-                )}
-              </div>
+              <BarChart3 className="h-5 w-5 text-[#0B7FC3]" />
             </div>
-          )}
 
-          {activeTab === "ringkasan" && (
-            <div className="grid gap-6 xl:grid-cols-3">
-              <section className="xl:col-span-2 rounded-2xl bg-white p-5 shadow-sm">
-                <div className="mb-5">
-                  <h3 className="text-lg font-bold text-slate-800">
-                    Ringkasan Cabang
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Rekap performa Cabang 1 dan Cabang 2.
-                  </p>
+            <div className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dailyChart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 12, fill: "#6B7280", fontWeight: 600 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tickFormatter={shortRupiah}
+                    tick={{ fontSize: 12, fill: "#6B7280", fontWeight: 600 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip formatter={(value) => rupiah(value)} />
+                  <Bar dataKey="pendapatan" fill="#0B7FC3" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="pengeluaran" fill="#EF4444" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="text-lg font-black text-gray-950">
+              Produk Terlaris
+            </h2>
+            <p className="mt-1 text-sm font-medium text-gray-500">
+              Produk dengan jumlah terjual terbanyak.
+            </p>
+
+            <div className="mt-5 space-y-3">
+              {topProducts.slice(0, 5).map((item, index) => (
+                <div
+                  key={`${item.name}-${index}`}
+                  className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3"
+                >
+                  <div>
+                    <p className="font-black text-gray-950">{item.name}</p>
+                    <p className="mt-0.5 text-xs font-semibold text-gray-500">
+                      Peringkat #{index + 1}
+                    </p>
+                  </div>
+
+                  <Badge variant="blue">{item.qty} item</Badge>
                 </div>
+              ))}
+            </div>
+          </Card>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  {branchSummary.map((item) => (
-                    <div
-                      key={item.branch}
-                      className="rounded-2xl border border-slate-100 p-4"
-                    >
-                      <div className="mb-3 flex justify-between">
-                        <h4 className="font-bold text-slate-800">
-                          {item.branch}
-                        </h4>
-                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
-                          {item.transactions} trx
+          <Card className="p-5 xl:col-span-2">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-black text-gray-950">
+                  Perbandingan Cabang
+                </h2>
+                <p className="mt-1 text-sm font-medium text-gray-500">
+                  Grafik pendapatan, pengeluaran, dan laba antar cabang.
+                </p>
+              </div>
+
+              <PackageCheck className="h-5 w-5 text-[#0B7FC3]" />
+            </div>
+
+            <div className="mb-5 h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={branchReport} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis
+                    dataKey="branch"
+                    tick={{ fontSize: 12, fill: "#6B7280", fontWeight: 700 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tickFormatter={shortRupiah}
+                    tick={{ fontSize: 12, fill: "#6B7280", fontWeight: 600 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip formatter={(value) => rupiah(value)} />
+                  <Bar dataKey="pendapatan" fill="#0B7FC3" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="pengeluaran" fill="#EF4444" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="laba" fill="#22C55E" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {branchReport.map((item) => (
+                <div
+                  key={item.branch}
+                  className="rounded-[20px] border border-gray-200 bg-gray-50 p-4"
+                >
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-base font-black text-gray-950">
+                      {item.branch}
+                    </h3>
+
+                    <Badge variant={item.laba >= 0 ? "green" : "red"}>
+                      {item.laba >= 0 ? "Untung" : "Minus"}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-sm font-semibold text-gray-500">
+                        Pendapatan
+                      </span>
+                      <span className="text-sm font-black text-gray-950">
+                        {rupiah(item.pendapatan)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span className="text-sm font-semibold text-gray-500">
+                        Pengeluaran
+                      </span>
+                      <span className="text-sm font-black text-red-600">
+                        {rupiah(item.pengeluaran)}
+                      </span>
+                    </div>
+
+                    <div className="border-t border-gray-200 pt-3">
+                      <div className="flex justify-between gap-3">
+                        <span className="text-sm font-semibold text-gray-500">
+                          Laba Kotor
+                        </span>
+                        <span
+                          className={`text-sm font-black ${
+                            item.laba >= 0 ? "text-green-600" : "text-red-600"
+                          }`}
+                        >
+                          {rupiah(item.laba)}
                         </span>
                       </div>
-
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Pendapatan</span>
-                          <span className="font-bold text-green-600">
-                            {formatRupiah(item.income)}
-                          </span>
-                        </div>
-
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Pengeluaran</span>
-                          <span className="font-bold text-red-600">
-                            {formatRupiah(item.expense)}
-                          </span>
-                        </div>
-
-                        <div className="flex justify-between border-t border-slate-100 pt-2">
-                          <span className="font-bold text-slate-700">
-                            Laba
-                          </span>
-                          <span
-                            className={`font-bold ${
-                              item.profit >= 0
-                                ? "text-green-600"
-                                : "text-red-600"
-                            }`}
-                          >
-                            {formatRupiah(item.profit)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <aside className="rounded-2xl bg-white p-5 shadow-sm">
-                <div className="mb-5">
-                  <h3 className="text-lg font-bold text-slate-800">
-                    Aktivitas Terbaru
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Transaksi dan pengeluaran terakhir.
-                  </p>
-                </div>
-
-                <div className="space-y-5">
-                  <div>
-                    <h4 className="mb-3 text-sm font-bold text-slate-700">
-                      Transaksi Terbaru
-                    </h4>
-
-                    <div className="space-y-3">
-                      {latestTransactions.map((transaction) => (
-                        <div
-                          key={transaction.id}
-                          className="rounded-xl border border-slate-100 p-3"
-                        >
-                          <p className="text-sm font-bold text-slate-800">
-                            {transaction.invoiceNumber}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {formatDateLabel(transaction.dateKey)} •{" "}
-                            {formatTimeOnly(transaction.transactionDate)}
-                          </p>
-                          <p className="mt-1 text-sm font-bold text-green-600">
-                            {formatRupiah(transaction.grandTotal)}
-                          </p>
-                        </div>
-                      ))}
-
-                      {latestTransactions.length === 0 && (
-                        <p className="text-sm text-slate-500">
-                          Belum ada transaksi.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="mb-3 text-sm font-bold text-slate-700">
-                      Pengeluaran Terbaru
-                    </h4>
-
-                    <div className="space-y-3">
-                      {latestExpenses.map((expense) => (
-                        <div
-                          key={expense.id}
-                          className="rounded-xl border border-slate-100 p-3"
-                        >
-                          <p className="text-sm font-bold text-slate-800">
-                            {expense.category}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {formatDateLabel(expense.dateKey)} •{" "}
-                            {expense.description}
-                          </p>
-                          <p className="mt-1 text-sm font-bold text-red-600">
-                            {formatRupiah(expense.amount)}
-                          </p>
-                        </div>
-                      ))}
-
-                      {latestExpenses.length === 0 && (
-                        <p className="text-sm text-slate-500">
-                          Belum ada pengeluaran.
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>
-              </aside>
+              ))}
             </div>
-          )}
-        </>
+          </Card>
+        </div>
+      )}
+
+      {activeTab === "transaksi" && (
+        <Card className="p-5">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">Transaksi</h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Daftar transaksi lunas pada periode terpilih.
+              </p>
+            </div>
+
+            <FileText className="h-5 w-5 text-[#0B7FC3]" />
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-gray-200">
+            <table className="w-full min-w-[860px] text-left text-sm">
+              <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">Invoice</th>
+                  <th className="px-4 py-3">Tanggal</th>
+                  <th className="px-4 py-3">Waktu</th>
+                  <th className="px-4 py-3">Cabang</th>
+                  <th className="px-4 py-3">Kasir</th>
+                  <th className="px-4 py-3">Metode</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Total</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-gray-100">
+                {filteredTransactions.map((item) => (
+                  <tr key={item.id} className="bg-white">
+                    <td className="px-4 py-3 font-black text-gray-950">
+                      {item.invoice}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {formatDate(item.date)}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {formatTime(item.date)}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {item.branch}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {item.cashier}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {item.payment}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="green">{item.status}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-right font-black text-gray-950">
+                      {rupiah(item.total)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {activeTab === "pengeluaran" && (
+        <Card className="p-5">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-gray-950">Pengeluaran</h2>
+              <p className="mt-1 text-sm font-medium text-gray-500">
+                Biaya operasional yang tercatat pada periode terpilih.
+              </p>
+            </div>
+
+            <WalletCards className="h-5 w-5 text-red-500" />
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-gray-200">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">Tanggal</th>
+                  <th className="px-4 py-3">Kategori</th>
+                  <th className="px-4 py-3">Keterangan</th>
+                  <th className="px-4 py-3">Cabang</th>
+                  <th className="px-4 py-3 text-right">Nominal</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-gray-100">
+                {filteredExpenses.map((item) => (
+                  <tr key={item.id} className="bg-white">
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {formatDate(item.date)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="orange">{item.category}</Badge>
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {item.description}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {item.branch}
+                    </td>
+                    <td className="px-4 py-3 text-right font-black text-red-600">
+                      {rupiah(item.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
     </div>
   );
