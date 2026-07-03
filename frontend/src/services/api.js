@@ -41,13 +41,16 @@ async function request(
   defaultErrorMessage = "Terjadi kesalahan."
 ) {
   try {
+    const isFormData = options.body instanceof FormData;
+    const headers = {
+      Accept: "application/json",
+      ...(!isFormData && options.body ? { "Content-Type": "application/json" } : {}),
+      ...options.headers,
+    };
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        Accept: "application/json",
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-        ...options.headers,
-      },
+      headers,
     });
 
     return handleResponse(response, defaultErrorMessage);
@@ -93,11 +96,12 @@ export async function getProductById(id) {
 }
 
 export async function createProduct(productData) {
+  const isFormData = productData instanceof FormData;
   const result = await request(
     `${API_BASE_URL}/products`,
     {
       method: "POST",
-      body: JSON.stringify(productData),
+      body: isFormData ? productData : JSON.stringify(productData),
     },
     "Gagal menambahkan produk."
   );
@@ -106,13 +110,32 @@ export async function createProduct(productData) {
 }
 
 export async function updateProduct(id, productData) {
+  const isFormData = productData instanceof FormData;
+  
+  if (isFormData) {
+    productData.append("_method", "PUT");
+  }
+
   const result = await request(
     `${API_BASE_URL}/products/${id}`,
     {
-      method: "PUT",
-      body: JSON.stringify(productData),
+      method: isFormData ? "POST" : "PUT",
+      body: isFormData ? productData : JSON.stringify(productData),
     },
     "Gagal memperbarui produk."
+  );
+
+  return result.data;
+}
+
+export async function mutateProductStock(id, amount) {
+  const result = await request(
+    `${API_BASE_URL}/products/${id}/mutate`,
+    {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    },
+    "Gagal memutasi stok produk."
   );
 
   return result.data;

@@ -70,8 +70,8 @@ class TransactionController extends Controller
                         throw new \Exception('Produk tidak ditemukan pada cabang ini.');
                     }
 
-                    if ($product->stock < $item['quantity']) {
-                        throw new \Exception("Stok {$product->name} tidak mencukupi.");
+                    if ($product->store_stock < $item['quantity']) {
+                        throw new \Exception("Stok {$product->name} tidak mencukupi di Toko.");
                     }
 
                     $itemSubtotal = $product->price * $item['quantity'];
@@ -141,7 +141,7 @@ class TransactionController extends Controller
                         'subtotal' => $itemPayload['subtotal'],
                     ]);
 
-                    $product->decrement('stock', $quantity);
+                    $product->decrement('store_stock', $quantity);
                 }
 
                 return $transaction->load([

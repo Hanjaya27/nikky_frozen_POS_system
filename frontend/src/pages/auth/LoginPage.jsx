@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Snowflake, User, Lock, Store, Clock, Eye, EyeOff, LogIn } from "lucide-react";
 
 import { loginUser } from "../../services/api";
+import frozenFoodImage from "../../assets/Frozen food.jpg";
 
 const branches = ["Cabang 1", "Cabang 2"];
 const shifts = ["Shift Pagi", "Shift Sore"];
@@ -30,6 +32,7 @@ function LoginPage() {
 
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -43,13 +46,23 @@ function LoginPage() {
   };
 
   const handleUserTypeChange = (userType) => {
+    let defaultBranch = "Cabang 1";
+    let defaultShift = "Shift Pagi";
+    
+    if (userType === "owner") {
+      defaultBranch = "Semua Cabang";
+      defaultShift = "Monitoring Owner";
+    } else if (userType === "admin") {
+      defaultShift = "Tanpa Shift";
+    }
+
     setFormData((prevData) => ({
       ...prevData,
       userType,
       username: "",
       password: "",
-      branch: userType === "owner" ? "Semua Cabang" : "Cabang 1",
-      shift: userType === "owner" ? "Monitoring Owner" : "Shift Pagi",
+      branch: defaultBranch,
+      shift: defaultShift,
     }));
 
     setErrorMessage("");
@@ -77,7 +90,10 @@ function LoginPage() {
     };
 
     localStorage.setItem("nikky_user", JSON.stringify(loginSession));
-    localStorage.setItem("nikky_login_activity_id", String(loginActivityId));
+    localStorage.setItem(
+      "nikky_login_activity_id",
+      String(loginActivityId)
+    );
   };
 
   const validateLoginResult = (user) => {
@@ -89,11 +105,13 @@ function LoginPage() {
       return "Akun ini sedang nonaktif. Silakan hubungi owner.";
     }
 
-    if (user.role === "kasir") {
+    if (user.role === "kasir" || user.role === "admin") {
       if (user.branch !== formData.branch) {
         return `Akun ${user.username} hanya terdaftar untuk ${user.branch}.`;
       }
+    }
 
+    if (user.role === "kasir") {
       if (user.shift !== formData.shift) {
         return `Akun ${user.username} terdaftar untuk ${user.shift}.`;
       }
@@ -135,13 +153,15 @@ function LoginPage() {
 
       if (loginData.user.role === "owner") {
         navigate("/owner/dashboard");
+      } else if (loginData.user.role === "admin") {
+        navigate("/admin/dashboard");
       } else {
         navigate("/");
       }
     } catch (error) {
       setErrorMessage(
         error.message ||
-          "Login gagal. Pastikan username dan password sudah benar."
+        "Login gagal. Pastikan username dan password sudah benar."
       );
     } finally {
       setIsSubmitting(false);
@@ -149,96 +169,98 @@ function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-100">
-      <div className="hidden w-1/2 flex-col justify-between bg-blue-600 p-10 text-white lg:flex">
-        <div>
-          <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-xl font-bold text-blue-600">
-            NF
-          </div>
+    <div className="flex h-screen overflow-hidden bg-[#FFF6EA] font-sans">
+      {/* Panel gambar sebelah kiri */}
+      <div className="relative hidden w-1/2 overflow-hidden lg:flex">
+        {/* Foto frozen food */}
+        <img
+          src={frozenFoodImage}
+          alt="Produk frozen food Nikky Frozen"
+          className="absolute inset-0 h-full w-full object-cover object-center"
+        />
 
-          <h1 className="max-w-xl text-4xl font-bold leading-tight">
-            Nikky Frozen POS System
-          </h1>
+        {/* Overlay gelap agar tulisan terlihat */}
+        <div className="absolute inset-0 bg-[#1B120E]/70" />
 
-          <p className="mt-4 max-w-lg text-blue-100">
-            Sistem kasir dan manajemen stok untuk membantu pengelolaan
-            transaksi, cabang, shift kasir, stok barang, pengeluaran, dan
-            laporan toko.
-          </p>
-        </div>
+        {/* Gradasi untuk memperjelas bagian bawah */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#1B120E]/90 via-transparent to-transparent" />
 
-        <div className="grid gap-4">
-          <div className="rounded-3xl bg-white/10 p-5 backdrop-blur">
-            <p className="text-sm text-blue-100">Akses Kasir</p>
-            <h3 className="mt-1 text-xl font-bold">
-              Kasir & Operasional Cabang
-            </h3>
-            <p className="mt-2 text-sm text-blue-100">
-              Kasir login berdasarkan akun database, cabang, dan shift kerja.
-            </p>
-          </div>
+        {/* Isi panel kiri */}
+        <div className="relative z-10 flex w-full flex-col justify-center p-14 text-white">
+          <div className="max-w-xl">
+            <h1 className="text-5xl font-black leading-tight tracking-tight drop-shadow-lg">
+              <span className="text-[#C80503]">Nikky</span> Frozen<br/>
+              POS System
+            </h1>
 
-          <div className="rounded-3xl bg-white/10 p-5 backdrop-blur">
-            <p className="text-sm text-blue-100">Akses Owner</p>
-            <h3 className="mt-1 text-xl font-bold">
-              Monitoring Semua Cabang
-            </h3>
-            <p className="mt-2 text-sm text-blue-100">
-              Owner dapat memantau laporan, transaksi, stok, pengeluaran, shift,
-              dan aktivitas login kasir dari backend.
+            <div className="mt-6 h-1 w-24 rounded-full bg-[#C80503]" />
+
+            <p className="mt-6 text-lg leading-relaxed text-slate-200 drop-shadow-md">
+              Sistem kasir dan manajemen stok untuk membantu pengelolaan transaksi, cabang, shift kasir, stok barang, pengeluaran, dan laporan toko.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="flex w-full items-center justify-center px-6 py-10 lg:w-1/2">
-        <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-sm">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-600 text-2xl font-bold text-white">
-              NF
+      {/* Panel login sebelah kanan */}
+      <div className="flex w-full items-center justify-center px-4 py-4 lg:w-1/2">
+        <div className="w-full max-w-md rounded-[2rem] border border-[#EBCDB8] bg-[#FFFDF8] p-6 lg:p-8 shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto">
+          <div className="mb-6 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[#C80503] text-white shadow-md shadow-[#C80503]/20">
+              <Snowflake className="h-6 w-6" />
             </div>
 
-            <h2 className="text-2xl font-bold text-slate-800">
+            <h2 className="text-2xl font-bold text-[#2A1712]">
               Login Sistem
             </h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Login menggunakan akun yang tersimpan di database backend.
+
+            <p className="mt-1 text-xs text-[#7A6258] px-2">
+              Login menggunakan akun dari database backend.
             </p>
           </div>
 
           {errorMessage && (
-            <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+            <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600">
               {errorMessage}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
+              <label className="mb-1.5 block text-sm font-bold text-[#2A1712]">
                 Jenis Pengguna
               </label>
-
-              <div className="grid grid-cols-2 gap-3">
+              
+              <div className="flex rounded-xl border border-[#EBCDB8] bg-white p-1">
                 <button
                   type="button"
                   onClick={() => handleUserTypeChange("kasir")}
-                  className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${
-                    formData.userType === "kasir"
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
+                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all duration-200 ${formData.userType === "kasir"
+                      ? "bg-[#C80503] text-white shadow-sm"
+                      : "text-[#7A6258] hover:bg-[#FFF6EA]"
+                    }`}
                 >
                   Kasir
                 </button>
 
                 <button
                   type="button"
+                  onClick={() => handleUserTypeChange("admin")}
+                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all duration-200 ${formData.userType === "admin"
+                      ? "bg-[#C80503] text-white shadow-sm"
+                      : "text-[#7A6258] hover:bg-[#FFF6EA]"
+                    }`}
+                >
+                  Admin
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => handleUserTypeChange("owner")}
-                  className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${
-                    formData.userType === "owner"
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
+                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all duration-200 ${formData.userType === "owner"
+                      ? "bg-[#C80503] text-white shadow-sm"
+                      : "text-[#7A6258] hover:bg-[#FFF6EA]"
+                    }`}
                 >
                   Owner
                 </button>
@@ -246,106 +268,131 @@ function LoginPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
+              <label className="mb-1.5 block text-sm font-bold text-[#2A1712]">
                 Username
               </label>
-              <input
-                type="text"
-                name="username"
-                value={formData.username}
-                onChange={handleChange}
-                placeholder="Masukkan username"
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-              />
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#C80503]">
+                  <User className="h-4 w-4" />
+                </div>
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  placeholder="Masukkan username"
+                  autoComplete="username"
+                  className="w-full rounded-xl border border-[#EBCDB8] bg-white py-2.5 pl-10 pr-4 text-sm text-[#2A1712] placeholder:text-[#EBCDB8] outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20"
+                />
+              </div>
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
+              <label className="mb-1.5 block text-sm font-bold text-[#2A1712]">
                 Password
               </label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Masukkan password"
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-              />
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#C80503]">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="Masukkan password"
+                  autoComplete="current-password"
+                  className="w-full rounded-xl border border-[#EBCDB8] bg-white py-2.5 pl-10 pr-10 text-sm text-[#2A1712] placeholder:text-[#EBCDB8] outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-[#C80503] hover:text-[#8B0306] focus:outline-none"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
+              <label className="mb-1.5 block text-sm font-bold text-[#2A1712]">
                 Cabang
               </label>
-              <select
-                name="branch"
-                value={formData.branch}
-                onChange={handleChange}
-                disabled={formData.userType === "owner"}
-                className={`w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 ${
-                  formData.userType === "owner"
-                    ? "cursor-not-allowed bg-slate-100 text-slate-400"
-                    : "bg-white text-slate-700"
-                }`}
-              >
-                {formData.userType === "owner" ? (
-                  <option value="Semua Cabang">Semua Cabang</option>
-                ) : (
-                  branches.map((branch) => (
-                    <option key={branch} value={branch}>
-                      {branch}
-                    </option>
-                  ))
-                )}
-              </select>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#C80503]">
+                  <Store className="h-4 w-4" />
+                </div>
+                <select
+                  name="branch"
+                  value={formData.branch}
+                  onChange={handleChange}
+                  disabled={formData.userType === "owner"}
+                  className={`w-full appearance-none rounded-xl border border-[#EBCDB8] py-2.5 pl-10 pr-10 text-sm outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20 ${formData.userType === "owner"
+                      ? "cursor-not-allowed bg-[#FFF6EA] text-[#7A6258]"
+                      : "bg-white text-[#2A1712]"
+                    }`}
+                >
+                  {formData.userType === "owner" ? (
+                    <option value="Semua Cabang">Semua Cabang</option>
+                  ) : (
+                    branches.map((branch) => (
+                      <option key={branch} value={branch}>
+                        {branch}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-[#2A1712]">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Shift
-              </label>
-              <select
-                name="shift"
-                value={formData.shift}
-                onChange={handleChange}
-                disabled={formData.userType === "owner"}
-                className={`w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 ${
-                  formData.userType === "owner"
-                    ? "cursor-not-allowed bg-slate-100 text-slate-400"
-                    : "bg-white text-slate-700"
-                }`}
-              >
-                {formData.userType === "owner" ? (
-                  <option value="Monitoring Owner">Monitoring Owner</option>
-                ) : (
-                  shifts.map((shift) => (
-                    <option key={shift} value={shift}>
-                      {shift}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
+            {formData.userType === "kasir" && (
+              <div>
+                <label className="mb-1.5 block text-sm font-bold text-[#2A1712]">
+                  Shift
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#C80503]">
+                    <Clock className="h-4 w-4" />
+                  </div>
+                  <select
+                    name="shift"
+                    value={formData.shift}
+                    onChange={handleChange}
+                    className="w-full appearance-none rounded-xl border border-[#EBCDB8] bg-white py-2.5 pl-10 pr-10 text-sm text-[#2A1712] outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20"
+                  >
+                    {shifts.map((shift) => (
+                      <option key={shift} value={shift}>
+                        {shift}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-[#2A1712]">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`w-full rounded-2xl py-3 font-bold text-white shadow-sm ${
-                isSubmitting
-                  ? "bg-slate-400"
-                  : "bg-blue-600 hover:bg-blue-700"
-              }`}
+              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 mt-2 font-bold text-white shadow-md transition-all ${isSubmitting
+                  ? "cursor-not-allowed bg-slate-400"
+                  : "bg-[#C80503] hover:bg-[#8B0306] hover:shadow-[#C80503]/30"
+                }`}
             >
-              {isSubmitting ? "Memproses Login..." : "Masuk ke Sistem"}
+              {isSubmitting ? (
+                "Memproses Login..."
+              ) : (
+                <>
+                  Masuk ke Sistem <LogIn className="h-4 w-4" />
+                </>
+              )}
             </button>
           </form>
-
-          <div className="mt-6 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-            <p className="font-bold text-slate-700">Akun Demo Backend:</p>
-            <p className="mt-1">Owner: owner / owner123</p>
-            <p>Kasir Cabang 1: kasir1 / kasir123</p>
-            <p>Kasir Cabang 2: kasir2 / kasir123</p>
-          </div>
         </div>
       </div>
     </div>

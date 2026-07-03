@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
@@ -65,16 +66,23 @@ class ProductController extends Controller
             'code' => ['required', 'string', 'max:50', 'unique:products,code'],
             'name' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:100'],
-            'stock' => ['required', 'integer', 'min:0'],
-            'min_stock' => ['required', 'integer', 'min:0'],
+            'store_stock' => ['required', 'integer', 'min:0'],
+            'warehouse_stock' => ['required', 'integer', 'min:0'],
             'price' => ['required', 'integer', 'min:0'],
             'expired_date' => ['nullable', 'date'],
             'storage_location' => ['nullable', 'string', 'max:100'],
-            'image' => ['nullable', 'string'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'status' => ['nullable', 'string', 'max:50'],
         ]);
 
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('products', 'public');
+            $validatedData['image'] = $path;
+        }
+
         $validatedData['status'] = $validatedData['status'] ?? 'Aktif';
+        $validatedData['stock'] = $validatedData['store_stock'] + $validatedData['warehouse_stock'];
+        $validatedData['min_stock'] = 0; 
 
         $product = Product::create($validatedData);
 
@@ -96,6 +104,14 @@ class ProductController extends Controller
             ], 404);
         }
 
+        // Pastikan hanya bisa mengedit produk cabangnya sendiri
+        if ($request->filled('branch_id') && $product->branch_id != $request->branch_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses untuk mengubah data cabang lain.',
+            ], 403);
+        }
+
         $validatedData = $request->validate([
             'branch_id' => ['required', 'exists:branches,id'],
             'code' => [
@@ -106,16 +122,25 @@ class ProductController extends Controller
             ],
             'name' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:100'],
-            'stock' => ['required', 'integer', 'min:0'],
-            'min_stock' => ['required', 'integer', 'min:0'],
+            'store_stock' => ['required', 'integer', 'min:0'],
+            'warehouse_stock' => ['required', 'integer', 'min:0'],
             'price' => ['required', 'integer', 'min:0'],
             'expired_date' => ['nullable', 'date'],
             'storage_location' => ['nullable', 'string', 'max:100'],
-            'image' => ['nullable', 'string'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'status' => ['nullable', 'string', 'max:50'],
         ]);
 
+        if ($request->hasFile('image')) {
+            if ($product->image) {
+                Storage::disk('public')->delete($product->image);
+            }
+            $path = $request->file('image')->store('products', 'public');
+            $validatedData['image'] = $path;
+        }
+
         $validatedData['status'] = $validatedData['status'] ?? 'Aktif';
+        $validatedData['stock'] = $validatedData['store_stock'] + $validatedData['warehouse_stock'];
 
         $product->update($validatedData);
 
@@ -126,7 +151,7 @@ class ProductController extends Controller
         ]);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $product = Product::find($id);
 
@@ -137,11 +162,66 @@ class ProductController extends Controller
             ], 404);
         }
 
+        if ($request->filled('branch_id') && $product->branch_id != $request->branch_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses untuk menghapus data cabang lain.',
+            ], 403);
+        }
+
+        if ($product->image) {
+            Storage::disk('public')->delete($product->image);
+        }
+
         $product->delete();
 
         return response()->json([
             'success' => true,
             'message' => 'Produk berhasil dihapus.',
+        ]);
+    }
+
+    public function mutateStock(Request $request, $id)
+    {
+        $product = Product::find($id);
+
+        if (!$product) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Produk tidak ditemukan.',
+            ], 404);
+        }
+
+        if ($request->filled('branch_id') && $product->branch_id != $request->branch_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses untuk memutasi stok cabang lain.',
+            ], 403);
+        }
+
+        $validatedData = $request->validate([
+            'amount' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $amount = $validatedData['amount'];
+
+        if ($product->warehouse_stock < $amount) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Stok gudang tidak mencukupi untuk mutasi sejumlah ' . $amount,
+            ], 422);
+        }
+
+        $product->warehouse_stock -= $amount;
+        $product->store_stock += $amount;
+        $product->stock = $product->store_stock + $product->warehouse_stock;
+        
+        $product->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Mutasi stok sebesar {$amount} berhasil dipindahkan ke toko.",
+            'data' => $product,
         ]);
     }
 }

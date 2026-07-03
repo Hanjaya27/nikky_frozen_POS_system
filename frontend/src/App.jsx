@@ -16,10 +16,15 @@ import DataKasirPage from "./pages/owner/DataKasirPage";
 import AktivitasLoginPage from "./pages/owner/AktivitasLoginPage";
 import RolePermissionPage from "./pages/owner/RolePermissionPage";
 
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminProdukPage from "./pages/admin/AdminProdukPage";
+import AdminMutasiPage from "./pages/admin/AdminMutasiPage";
+import AdminRiwayatStok from "./pages/admin/AdminRiwayatStok";
+
 const defaultPermissions = [
   { id: "pos", kasirAccess: true },
   { id: "shift", kasirAccess: true },
-  { id: "barang", kasirAccess: true },
+  { id: "barang", kasirAccess: false },
   { id: "transaksi", kasirAccess: true },
   { id: "pengeluaran", kasirAccess: false },
   { id: "laporan", kasirAccess: false },
@@ -61,7 +66,6 @@ function getPermissions() {
 
 function hasKasirPermission(permissionId) {
   const permissions = getPermissions();
-
   const permission = permissions.find((item) => item.id === permissionId);
 
   return permission?.kasirAccess === true;
@@ -72,6 +76,10 @@ function GuestRoute({ children }) {
 
   if (currentUser?.role === "owner") {
     return <Navigate to="/owner/dashboard" replace />;
+  }
+
+  if (currentUser?.role === "admin") {
+    return <Navigate to="/admin/dashboard" replace />;
   }
 
   if (currentUser?.role === "kasir") {
@@ -105,6 +113,24 @@ function OwnerOnlyRoute({ children }) {
   return children;
 }
 
+function AdminOnlyRoute({ children }) {
+  const currentUser = getCurrentUser();
+
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (currentUser.role !== "admin") {
+    if (currentUser.role === "owner") {
+      return <Navigate to="/owner/dashboard" replace />;
+    }
+
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
 function PermissionRoute({ permissionId, children }) {
   const currentUser = getCurrentUser();
 
@@ -112,7 +138,7 @@ function PermissionRoute({ permissionId, children }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (currentUser.role === "owner") {
+  if (currentUser.role === "owner" || currentUser.role === "admin") {
     return children;
   }
 
@@ -138,6 +164,10 @@ function RoleRedirect() {
 
   if (currentUser.role === "owner") {
     return <Navigate to="/owner/dashboard" replace />;
+  }
+
+  if (currentUser.role === "admin") {
+    return <Navigate to="/admin/dashboard" replace />;
   }
 
   return (
@@ -173,6 +203,25 @@ function AccessDenied({ permissionId }) {
         >
           Kembali
         </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminFeaturePlaceholder({ title, description }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+      <p className="text-xs font-black uppercase tracking-[0.22em] text-[#0B63CE]">
+        Admin Gudang
+      </p>
+      <h1 className="mt-2 text-2xl font-black text-slate-950">{title}</h1>
+      <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">
+        {description}
+      </p>
+
+      <div className="mt-6 rounded-2xl bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600">
+        Halaman ini sudah disiapkan di routing. Setelah dashboard admin selesai,
+        bagian ini bisa kita isi dengan form dan tabel operasional.
       </div>
     </div>
   );
@@ -234,6 +283,42 @@ function App() {
               <OwnerOnlyRoute>
                 <RolePermissionPage />
               </OwnerOnlyRoute>
+            }
+          />
+
+          <Route
+            path="admin/dashboard"
+            element={
+              <AdminOnlyRoute>
+                <AdminDashboard />
+              </AdminOnlyRoute>
+            }
+          />
+
+          <Route
+            path="admin/produk"
+            element={
+              <AdminOnlyRoute>
+                <AdminProdukPage />
+              </AdminOnlyRoute>
+            }
+          />
+
+          <Route
+            path="admin/mutasi"
+            element={
+              <AdminOnlyRoute>
+                <AdminMutasiPage />
+              </AdminOnlyRoute>
+            }
+          />
+
+          <Route
+            path="admin/riwayat"
+            element={
+              <AdminOnlyRoute>
+                <AdminRiwayatStok />
+              </AdminOnlyRoute>
             }
           />
 

@@ -1,17 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard,
-  ReceiptText,
-  PackageSearch,
-  WalletCards,
-  Settings,
-  LogOut,
-  ShoppingCart,
-  Clock3,
+  AlertTriangle,
+  BarChart3,
   Boxes,
+  Clock3,
   History,
-  Sparkles,
+  LogOut,
+  PackageMinus,
+  PackagePlus,
+  PackageSearch,
+  ReceiptText,
+  Settings,
+  ShieldCheck,
+  ShoppingCart,
+  ChevronsLeft,
+  ChevronsRight,
+  Snowflake,
+  UsersRound,
+  WalletCards,
+  Warehouse,
   X,
 } from "lucide-react";
 
@@ -19,57 +27,40 @@ import * as api from "../services/api";
 
 const PERMISSION_STORAGE_KEY = "nikky_kasir_permissions";
 const PERMISSION_MIGRATION_KEY = "nikky_permissions_initialized_v2";
+const SIDEBAR_COLLAPSED_KEY = "nikky_sidebar_collapsed_final";
 
 export const DEFAULT_KASIR_PERMISSIONS = [
-  { id: "pos", name: "Kasir / POS", kasirAccess: true },
+  { id: "pos", name: "Kasir", kasirAccess: true },
   { id: "shift", name: "Shift Saya", kasirAccess: true },
   { id: "transaksi", name: "Riwayat Transaksi", kasirAccess: true },
-  { id: "barang", name: "Barang & Stok", kasirAccess: true },
-  { id: "laporan", name: "Laporan", kasirAccess: true },
-  { id: "pengeluaran", name: "Pengeluaran", kasirAccess: true },
-  { id: "pengaturan", name: "Pengaturan", kasirAccess: true },
 ];
 
 const ownerMenus = [
-  { name: "Dashboard", path: "/owner/dashboard", icon: LayoutDashboard },
+  { name: "Dashboard", path: "/owner/dashboard", icon: BarChart3 },
   { name: "Laporan", path: "/laporan", icon: ReceiptText },
-  { name: "Monitoring Stok", path: "/barang", icon: PackageSearch },
+  { name: "Barang & Stok", path: "/barang", icon: PackageSearch },
   { name: "Pengeluaran", path: "/pengeluaran", icon: WalletCards },
+  { name: "Data User", path: "/owner/data-kasir", icon: UsersRound },
+  { name: "Aktivitas Login", path: "/owner/aktivitas-login", icon: History },
+  { name: "Role Permission", path: "/owner/role-permission", icon: ShieldCheck },
   { name: "Pengaturan", path: "/pengaturan", icon: Settings },
+];
+
+const adminMenus = [
+  { name: "Dashboard Admin", path: "/admin/dashboard", icon: BarChart3 },
+  { name: "Produk", path: "/admin/produk", icon: Boxes },
+  { name: "Mutasi Stok", path: "/admin/mutasi", icon: PackagePlus },
+  { name: "Riwayat Stok", path: "/admin/riwayat", icon: History },
 ];
 
 const kasirMenus = [
   { name: "Kasir", path: "/", icon: ShoppingCart, permissionId: "pos" },
   { name: "Shift Saya", path: "/shift", icon: Clock3, permissionId: "shift" },
   {
-    name: "Barang & Stok",
-    path: "/barang",
-    icon: Boxes,
-    permissionId: "barang",
-  },
-  {
     name: "Riwayat Transaksi",
     path: "/transaksi",
     icon: History,
     permissionId: "transaksi",
-  },
-  {
-    name: "Laporan",
-    path: "/laporan",
-    icon: ReceiptText,
-    permissionId: "laporan",
-  },
-  {
-    name: "Pengeluaran",
-    path: "/pengeluaran",
-    icon: WalletCards,
-    permissionId: "pengeluaran",
-  },
-  {
-    name: "Pengaturan",
-    path: "/pengaturan",
-    icon: Settings,
-    permissionId: "pengaturan",
   },
 ];
 
@@ -145,7 +136,8 @@ function isOldThreeMenuOnly(permissions) {
 
 function getStoredKasirPermissions() {
   const savedPermissions = localStorage.getItem(PERMISSION_STORAGE_KEY);
-  const migrationDone = localStorage.getItem(PERMISSION_MIGRATION_KEY) === "true";
+  const migrationDone =
+    localStorage.getItem(PERMISSION_MIGRATION_KEY) === "true";
 
   if (!savedPermissions) {
     localStorage.setItem(PERMISSION_MIGRATION_KEY, "true");
@@ -168,6 +160,10 @@ function getStoredKasirPermissions() {
   }
 }
 
+function getInitialCollapsedState() {
+  return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+}
+
 function Sidebar({ isOpen = false, onClose = () => {} }) {
   const navigate = useNavigate();
 
@@ -175,14 +171,25 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
   const [permissions, setPermissions] = useState(() =>
     getStoredKasirPermissions(),
   );
+  const [isCollapsed, setIsCollapsed] = useState(getInitialCollapsedState);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const userRole = String(currentUser?.role || "").toLowerCase();
+
   const isOwner = userRole === "owner";
+  const isAdmin = userRole === "admin";
   const isKasir = userRole === "kasir";
 
   const syncPermissions = () => {
     setPermissions(getStoredKasirPermissions());
+  };
+
+  const toggleCollapse = () => {
+    setIsCollapsed((previousValue) => {
+      const nextValue = !previousValue;
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(nextValue));
+      return nextValue;
+    });
   };
 
   useEffect(() => {
@@ -214,15 +221,14 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
 
   const menus = useMemo(() => {
     if (isOwner) return ownerMenus;
+    if (isAdmin) return adminMenus;
 
-    return kasirMenus.filter((menu) => {
-      const permission = permissions.find(
-        (item) => item.id === menu.permissionId,
-      );
+    if (isKasir) {
+      return kasirMenus;
+    }
 
-      return permission?.kasirAccess === true;
-    });
-  }, [isOwner, permissions]);
+    return [];
+  }, [isOwner, isAdmin, isKasir, permissions]);
 
   const clearLoginSession = () => {
     localStorage.removeItem("nikky_user");
@@ -274,58 +280,71 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
     <>
       <div
         onClick={onClose}
-        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity lg:hidden ${
+        className={`fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px] transition-opacity lg:hidden ${
           isOpen ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[284px] shrink-0 flex-col border-r border-gray-200 bg-white text-gray-900 transition-transform duration-300 lg:sticky lg:top-0 lg:z-20 lg:translate-x-0 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[232px] shrink-0 flex-col border-r border-[#EBCDB8] bg-[#FFFDF8] text-[#2A1712] shadow-2xl shadow-slate-950/10 transition-all duration-300 lg:sticky lg:top-0 lg:z-20 lg:translate-x-0 lg:shadow-none ${
+          isCollapsed ? "lg:w-[76px]" : "lg:w-[232px]"
+        } ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="border-b border-gray-100 px-5 pb-5 pt-5">
-          <div className="mb-4 flex items-center justify-between lg:hidden">
-            <p className="text-sm font-black text-gray-900">Menu</p>
+        <div className="flex h-[76px] items-center justify-between px-4">
+          <div
+            className={`flex min-w-0 items-center gap-3 ${
+              isCollapsed ? "lg:hidden" : ""
+            }`}
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#C80503] text-white">
+              <Snowflake className="h-5 w-5" strokeWidth={2.5} />
+            </div>
 
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100 text-gray-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          <div className="rounded-[26px] bg-gradient-to-br from-[#0B7FC3] via-[#0D8FDC] to-[#075985] p-4 text-white shadow-lg shadow-sky-900/10">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-lg font-black text-[#0B7FC3] shadow-sm">
-                  NF
-                </div>
-
-                <div className="min-w-0">
-                  <h1 className="truncate text-[17px] font-black leading-tight">
-                    Nikky Frozen
-                  </h1>
-                  <p className="mt-0.5 text-xs font-semibold text-sky-100">
-                    POS System
-                  </p>
-                </div>
-              </div>
-
-              <div className="shrink-0 rounded-full bg-white/15 p-2 ring-1 ring-white/20">
-                <Sparkles className="h-4 w-4" />
-              </div>
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-black text-[#C80503]">
+                Nikky Frozen
+              </h1>
+              <p className="truncate text-[11px] font-semibold text-[#7A6258]">
+                POS System
+              </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            className={`hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#FFF6EA] text-[#7A6258] transition hover:bg-[#C80503]/10 hover:text-[#C80503] lg:flex ${
+              isCollapsed ? "lg:hidden" : ""
+            }`}
+            aria-label="Perkecil sidebar"
+            title="Perkecil sidebar"
+          >
+            <ChevronsLeft className="h-4 w-4" strokeWidth={2.8} />
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            className={`hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#C80503]/10 text-[#C80503] transition hover:bg-[#C80503]/20 ${
+              isCollapsed ? "lg:flex" : "lg:hidden"
+            }`}
+            aria-label="Buka sidebar"
+            title="Buka sidebar"
+          >
+            <ChevronsRight className="h-4 w-4" strokeWidth={2.8} />
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FFF6EA] text-[#7A6258] transition hover:bg-[#EBCDB8] lg:hidden"
+            aria-label="Tutup menu"
+          >
+            <X className="h-4 w-4" strokeWidth={2.5} />
+          </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-4 py-5">
-          <p className="mb-3 px-2 text-[11px] font-black uppercase tracking-[0.18em] text-gray-400">
-            Menu Utama
-          </p>
-
+        <nav className="flex-1 overflow-y-auto px-3 py-5">
           <div className="space-y-1.5">
             {menus.length > 0 ? (
               menus.map((menu) => {
@@ -337,43 +356,53 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
                     to={menu.path}
                     end={menu.path === "/"}
                     onClick={onClose}
+                    title={isCollapsed ? menu.name : undefined}
                     className={({ isActive }) =>
                       [
-                        "group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition-all duration-200",
+                        "group flex items-center rounded-xl text-sm font-semibold transition-all duration-200",
+                        isCollapsed
+                          ? "lg:justify-center lg:px-0 lg:py-3"
+                          : "gap-3 px-3 py-2.5",
                         isActive
-                          ? "bg-[#EAF4FF] text-[#0B7FC3] shadow-sm"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-950",
+                          ? "bg-[#C80503]/10 text-[#C80503]"
+                          : "text-[#7A6258] hover:bg-[#FFF6EA] hover:text-[#C80503]",
                       ].join(" ")
                     }
                   >
-                    <Icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
-                    <span className="truncate">{menu.name}</span>
+                    <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />
+
+                    <span
+                      className={`min-w-0 truncate ${
+                        isCollapsed ? "lg:hidden" : ""
+                      }`}
+                    >
+                      {menu.name}
+                    </span>
                   </NavLink>
                 );
               })
             ) : (
-              <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-xs font-semibold text-orange-700">
-                Tidak ada menu yang dapat diakses.
+              <div className="rounded-xl border border-[#EBCDB8] bg-[#FFF6EA] px-3 py-2 text-xs font-semibold text-[#7A6258]">
+                Tidak ada menu.
               </div>
             )}
           </div>
-
-          {isKasir && (
-            <div className="mt-5 rounded-2xl bg-gray-50 px-4 py-3 text-xs font-semibold text-gray-500">
-              Menu kasir mengikuti akses yang diatur Owner.
-            </div>
-          )}
         </nav>
 
-        <div className="border-t border-gray-100 p-4">
+        <div className="border-t border-[#EBCDB8] px-4 py-4">
           <button
             type="button"
             onClick={handleLogout}
             disabled={isLoggingOut}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-black text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className={`flex w-full items-center rounded-xl text-sm font-semibold text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 ${
+              isCollapsed ? "lg:justify-center lg:px-0 lg:py-2.5" : "gap-2 px-2 py-2.5"
+            }`}
+            title="Keluar"
           >
-            <LogOut className="h-4 w-4" />
-            {isLoggingOut ? "Keluar..." : "Keluar"}
+            <LogOut className="h-4 w-4 shrink-0" strokeWidth={2.2} />
+            <span className={isCollapsed ? "lg:hidden" : ""}>
+              {isLoggingOut ? "Keluar..." : "Keluar"}
+            </span>
           </button>
         </div>
       </aside>
