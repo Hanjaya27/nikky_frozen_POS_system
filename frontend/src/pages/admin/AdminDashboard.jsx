@@ -12,6 +12,10 @@ import {
   PackageMinus,
   RefreshCcw,
   Search,
+  History,
+  ArrowRightLeft,
+  PackagePlus,
+  Edit,
   Snowflake,
   TriangleAlert,
   Warehouse,
@@ -243,6 +247,8 @@ function AdminDashboard() {
   const [selectedFilter, setSelectedFilter] = useState("semua");
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [isLoadingActivities, setIsLoadingActivities] = useState(false);
 
   const fetchProducts = async () => {
     try {
@@ -263,9 +269,22 @@ function AdminDashboard() {
     }
   };
 
+  const fetchActivities = async () => {
+    try {
+      setIsLoadingActivities(true);
+      const res = await api.getStockHistories({ branch_id: currentUser?.branch_id });
+      setRecentActivities(Array.isArray(res) ? res.slice(0, 5) : []);
+    } catch (error) {
+      console.error("Gagal mengambil aktivitas:", error);
+    } finally {
+      setIsLoadingActivities(false);
+    }
+  };
+
   useEffect(() => {
     if (currentUser) {
       fetchProducts();
+      fetchActivities();
     }
   }, [currentUser?.branch_id]);
 
@@ -345,13 +364,13 @@ function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div className="mb-2">
-        <h1 className="text-2xl font-black text-[#2A1712]">Dashboard {currentUser.branch || "Admin"}</h1>
+        <h1 className="text-2xl font-black text-[#2A1712]">Dashboard Admin</h1>
         <p className="mt-1 text-sm font-semibold text-[#7A6258]">
-          Ringkasan stok gudang dan toko untuk cabang Anda.
+          Kelola produk, stok gudang, mutasi, dan riwayat stok cabang Anda.
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           title="Total Produk"
           value={summary.totalProducts}
@@ -374,15 +393,63 @@ function AdminDashboard() {
         />
 
         <StatCard
-          title="Stok Kosong"
-          value={summary.storeEmptyProducts.length + summary.warehouseEmptyProducts.length}
-          description="Perlu tindakan"
+          title="Toko Kosong"
+          value={summary.storeEmptyProducts.length}
+          description="Stok display habis"
           icon={TriangleAlert}
+        />
+
+        <StatCard
+          title="Gudang Kosong"
+          value={summary.warehouseEmptyProducts.length}
+          description="Stok simpanan habis"
+          icon={PackageMinus}
         />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-6">
+          <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#EBCDB8] pb-4">
+              <div>
+                <h2 className="text-lg font-black text-[#2A1712]">
+                  Stok Terendah
+                </h2>
+                <p className="mt-1 text-sm font-medium text-[#7A6258]">
+                  Produk yang perlu diprioritaskan untuk restock.
+                </p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="border-b border-[#EBCDB8] text-xs font-black uppercase text-[#7A6258]">
+                  <tr>
+                    <th className="pb-3 pr-4">Produk</th>
+                    <th className="pb-3 px-4 text-right">Stok Toko</th>
+                    <th className="pb-3 px-4 text-right">Stok Gudang</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#EBCDB8]">
+                  {summary.activeProducts
+                    .filter(p => p.storeStock > 0 || p.warehouseStock > 0)
+                    .sort((a, b) => (a.storeStock + a.warehouseStock) - (b.storeStock + b.warehouseStock))
+                    .slice(0, 5)
+                    .map(p => (
+                      <tr key={p.id} className="hover:bg-[#FFF6EA] transition">
+                        <td className="py-3 pr-4 font-black text-[#2A1712] text-sm">{p.name}</td>
+                        <td className="py-3 px-4 text-right font-bold text-[#C80503]">{p.storeStock}</td>
+                        <td className="py-3 px-4 text-right font-bold text-[#7A6258]">{p.warehouseStock}</td>
+                      </tr>
+                    ))}
+                  {summary.activeProducts.length === 0 && (
+                     <tr>
+                       <td colSpan={3} className="py-4 text-center text-sm font-medium text-[#7A6258]">Tidak ada data.</td>
+                     </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
           <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -492,6 +559,69 @@ function AdminDashboard() {
             <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#EBCDB8] pb-4">
               <div>
                 <h2 className="text-lg font-black text-[#2A1712]">
+                  Aktivitas Terbaru
+                </h2>
+                <p className="mt-1 text-sm font-medium text-[#7A6258]">
+                  Log mutasi dan restock terakhir.
+                </p>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FFF6EA] text-[#C80503] border border-[#EBCDB8]">
+                <History className="h-5 w-5" strokeWidth={2.4} />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {isLoadingActivities ? (
+                <div className="p-4 text-center">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-[#C80503]" />
+                </div>
+              ) : recentActivities.length > 0 ? (
+                recentActivities.map((activity) => {
+                  let label = "Mutasi";
+                  let Icon = ArrowRightLeft;
+                  let colorClass = "bg-blue-50 text-blue-700 border-blue-200";
+                  
+                  if (activity.type === "restock_warehouse") {
+                    label = "Restock";
+                    Icon = Warehouse;
+                    colorClass = "bg-green-50 text-green-700 border-green-200";
+                  } else if (activity.type === "product_created") {
+                    label = "Baru";
+                    Icon = PackagePlus;
+                    colorClass = "bg-purple-50 text-purple-700 border-purple-200";
+                  } else if (activity.type === "product_updated") {
+                    label = "Update";
+                    Icon = Edit;
+                    colorClass = "bg-orange-50 text-orange-700 border-orange-200";
+                  }
+
+                  return (
+                    <div key={activity.id} className="flex items-center gap-3 rounded-xl bg-white border border-[#EBCDB8] px-4 py-3">
+                      <div className={`flex shrink-0 h-10 w-10 items-center justify-center rounded-xl border ${colorClass}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-black text-[#2A1712]">
+                          {activity.product?.name || "Produk Terhapus"}
+                        </p>
+                        <p className="truncate text-xs font-semibold text-[#7A6258]">
+                          {label} · {activity.quantity} pcs
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-4 text-center text-sm font-bold text-gray-700">
+                  Belum ada aktivitas stok.
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#EBCDB8] pb-4">
+              <div>
+                <h2 className="text-lg font-black text-[#2A1712]">
                   Perlu Dicek (Toko)
                 </h2>
                 <p className="mt-1 text-sm font-medium text-[#7A6258]">
@@ -579,6 +709,51 @@ function AdminDashboard() {
               )}
             </div>
           </div>
+
+          {(summary.expiredProducts.length > 0 || summary.expiringSoonProducts.length > 0) && (
+            <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#EBCDB8] pb-4">
+                <div>
+                  <h2 className="text-lg font-black text-[#2A1712]">
+                    Perhatian (Expired)
+                  </h2>
+                  <p className="mt-1 text-sm font-medium text-[#7A6258]">
+                    Produk hampir atau sudah expired.
+                  </p>
+                </div>
+
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FFF6EA] text-[#C80503] border border-[#EBCDB8]">
+                  <CalendarClock className="h-5 w-5" strokeWidth={2.4} />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {[...summary.expiredProducts, ...summary.expiringSoonProducts].slice(0, 5).map((product) => {
+                   const days = getDaysUntilExpired(product.expiredDate);
+                   const isExpired = days < 0;
+                   return (
+                    <div
+                      key={`exp-${product.id}-${product.code}`}
+                      className="flex items-center justify-between gap-3 rounded-xl bg-white border border-[#EBCDB8] px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-[#2A1712]">
+                          {product.name}
+                        </p>
+                        <p className="truncate text-xs font-semibold text-[#7A6258]">
+                          Exp: {formatDate(product.expiredDate)}
+                        </p>
+                      </div>
+
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold border ${isExpired ? 'bg-red-50 text-red-700 border-red-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
+                        {isExpired ? 'Expired' : 'Segera'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </aside>
       </div>
     </div>

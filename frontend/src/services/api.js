@@ -128,14 +128,66 @@ export async function updateProduct(id, productData) {
   return result.data;
 }
 
-export async function mutateProductStock(id, amount) {
+export async function mutateProductStock(id, payload) {
   const result = await request(
     `${API_BASE_URL}/products/${id}/mutate`,
     {
       method: "POST",
-      body: JSON.stringify({ amount }),
+      body: JSON.stringify(payload),
     },
     "Gagal memutasi stok produk."
+  );
+
+  return result.data;
+}
+
+export async function restockProduct(id, payload) {
+  const result = await request(
+    `${API_BASE_URL}/products/${id}/restock`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    "Gagal restock gudang."
+  );
+
+  return result.data;
+}
+
+export async function adjustProductStock(id, payload) {
+  const result = await request(
+    `${API_BASE_URL}/products/${id}/adjust`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    "Gagal mengoreksi stok."
+  );
+
+  return result.data;
+}
+
+export async function transferProductStock(id, payload) {
+  const result = await request(
+    `${API_BASE_URL}/products/${id}/transfer`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    "Gagal mentransfer stok ke cabang tujuan."
+  );
+
+  return result.data;
+}
+
+export async function batchProcessStock(payload) {
+  const result = await request(
+    `${API_BASE_URL}/products/batch-stock`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    "Gagal memproses batch stok."
   );
 
   return result.data;
@@ -151,6 +203,28 @@ export async function deleteProduct(id) {
   );
 
   return result;
+}
+
+/* =========================
+   STOCK HISTORIES API
+========================= */
+
+export async function getStockHistories(params = {}) {
+  const queryString = buildQueryParams(params);
+
+  const url = queryString
+    ? `${API_BASE_URL}/stock-histories?${queryString}`
+    : `${API_BASE_URL}/stock-histories`;
+
+  const result = await request(
+    url,
+    {
+      method: "GET",
+    },
+    "Gagal mengambil riwayat stok."
+  );
+
+  return result.data;
 }
 
 /* =========================
@@ -600,4 +674,18 @@ export async function resetSettingsApi() {
 
 export function getApiBaseUrl() {
   return API_BASE_URL;
+}
+
+/* =========================
+   BRANCHES API
+========================= */
+
+export async function getBranches() {
+  const result = await request(
+    `${API_BASE_URL}/branches`,
+    { method: "GET" },
+    "Gagal mengambil data cabang."
+  );
+
+  return result.data;
 }

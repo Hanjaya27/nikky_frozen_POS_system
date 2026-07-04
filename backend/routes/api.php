@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\LoginActivityController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\RolePermissionController;
 use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\StockHistoryController;
 
 /*
 |--------------------------------------------------------------------------
@@ -29,9 +30,22 @@ Route::post('/logout', [AuthController::class, 'logout']);
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{id}', [ProductController::class, 'show']);
 Route::post('/products', [ProductController::class, 'store']);
+Route::post('/products/batch-stock', [ProductController::class, 'batchStock']);
 Route::put('/products/{id}', [ProductController::class, 'update']);
 Route::delete('/products/{id}', [ProductController::class, 'destroy']);
 Route::post('/products/{id}/mutate', [ProductController::class, 'mutateStock']);
+Route::post('/products/{id}/restock', [ProductController::class, 'restockWarehouse']);
+Route::post('/products/{id}/adjust', [ProductController::class, 'adjustStock']);
+Route::post('/products/{id}/transfer', [ProductController::class, 'transferStock']);
+
+Route::get('/branches', function () {
+    return response()->json([
+        'success' => true,
+        'data' => \App\Models\Branch::all(),
+    ]);
+});
+
+Route::get('/stock-histories', [StockHistoryController::class, 'index']);
 
 /*
 |--------------------------------------------------------------------------
