@@ -12,12 +12,16 @@ class RolePermission extends Model
         'menu_group',
         'path',
         'icon',
+        'owner_access',
+        'admin_access',
         'kasir_access',
         'sort_order',
         'status',
     ];
 
     protected $casts = [
+        'owner_access' => 'boolean',
+        'admin_access' => 'boolean',
         'kasir_access' => 'boolean',
     ];
 }

@@ -22,6 +22,14 @@ class Product extends Model
         'status',
     ];
 
+    protected $casts = [
+        'stock' => 'integer',
+        'store_stock' => 'integer',
+        'warehouse_stock' => 'integer',
+        'price' => 'integer',
+        'min_stock' => 'integer',
+    ];
+
     public function branch()
     {
         return $this->belongsTo(Branch::class);

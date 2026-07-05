@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Models\StockHistory;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -70,8 +71,8 @@ class TransactionController extends Controller
                         throw new \Exception('Produk tidak ditemukan pada cabang ini.');
                     }
 
-                    if ($product->store_stock < $item['quantity']) {
-                        throw new \Exception("Stok {$product->name} tidak mencukupi di Toko.");
+                    if ($product->stock < $item['quantity']) {
+                        throw new \Exception("Stok produk '{$product->name}' tidak cukup.");
                     }
 
                     $itemSubtotal = $product->price * $item['quantity'];
@@ -141,7 +142,20 @@ class TransactionController extends Controller
                         'subtotal' => $itemPayload['subtotal'],
                     ]);
 
-                    $product->decrement('store_stock', $quantity);
+                    $product->decrement('stock', $quantity);
+
+                    StockHistory::create([
+                        'product_id' => $product->id,
+                        'branch_id' => $product->branch_id,
+                        'user_id' => null,
+                        'type' => 'sale',
+                        'quantity' => $quantity,
+                        'before_store_stock' => $product->stock + $quantity,
+                        'after_store_stock' => $product->stock,
+                        'before_warehouse_stock' => $product->warehouse_stock,
+                        'after_warehouse_stock' => $product->warehouse_stock,
+                        'note' => 'Penjualan kasir',
+                    ]);
                 }
 
                 return $transaction->load([

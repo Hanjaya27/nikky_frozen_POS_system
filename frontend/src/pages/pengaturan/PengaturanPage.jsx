@@ -18,99 +18,9 @@ import {
   Store,
   ToggleLeft,
   ToggleRight,
-  Trash2,
   WalletCards,
 } from "lucide-react";
-
-const PERMISSION_STORAGE_KEY = "nikky_kasir_permissions";
-const STORE_SETTING_KEY = "nikky_store_settings";
-const STOCK_SETTING_KEY = "nikky_stock_settings";
-const TRANSACTION_SETTING_KEY = "nikky_transaction_settings";
-
-const defaultPermissions = [
-  {
-    id: "pos",
-    name: "Kasir / POS",
-    description: "Kasir dapat membuat transaksi penjualan.",
-    icon: ShoppingCart,
-    kasirAccess: true,
-    recommended: true,
-  },
-  {
-    id: "shift",
-    name: "Shift Saya",
-    description: "Kasir dapat membuka dan menutup shift kerja.",
-    icon: Clock3,
-    kasirAccess: true,
-    recommended: true,
-  },
-  {
-    id: "transaksi",
-    name: "Riwayat Transaksi",
-    description: "Kasir dapat melihat riwayat transaksi kasir.",
-    icon: ReceiptText,
-    kasirAccess: true,
-    recommended: true,
-  },
-  {
-    id: "barang",
-    name: "Barang & Stok",
-    description: "Kasir dapat melihat monitoring stok produk.",
-    icon: Boxes,
-    kasirAccess: false,
-    recommended: false,
-  },
-  {
-    id: "laporan",
-    name: "Laporan",
-    description: "Kasir dapat melihat laporan penjualan.",
-    icon: LayoutDashboard,
-    kasirAccess: false,
-    recommended: false,
-  },
-  {
-    id: "pengeluaran",
-    name: "Pengeluaran",
-    description: "Kasir dapat membuka data pengeluaran.",
-    icon: WalletCards,
-    kasirAccess: false,
-    recommended: false,
-  },
-  {
-    id: "pengaturan",
-    name: "Pengaturan",
-    description: "Kasir dapat membuka halaman pengaturan sistem.",
-    icon: Settings,
-    kasirAccess: false,
-    recommended: false,
-  },
-];
-
-const defaultStoreSettings = {
-  storeName: "Nikky Frozen Food",
-  ownerName: "Owner",
-  branchName: "Cabang 1",
-  phone: "08xxxxxxxxxx",
-  address: "Alamat toko belum diatur",
-  footerReceipt: "Terima kasih sudah berbelanja.",
-};
-
-const defaultStockSettings = {
-  defaultMinStock: 5,
-  expiryWarningDays: 30,
-  showWarehouseMap: true,
-  lowStockAlert: true,
-  expiredAlert: true,
-};
-
-const defaultTransactionSettings = {
-  allowCash: true,
-  allowQris: true,
-  allowTransfer: true,
-  allowDiscount: true,
-  allowVoid: false,
-  printReceipt: true,
-};
+import * as api from "../../services/api";
 
 const tabs = [
   { id: "profil", label: "Profil Toko", icon: Store },
@@ -120,65 +30,10 @@ const tabs = [
   { id: "struk", label: "Struk", icon: Printer },
 ];
 
-function readJsonStorage(key, fallback) {
-  const savedValue = localStorage.getItem(key);
-
-  if (!savedValue) return fallback;
-
-  try {
-    return {
-      ...fallback,
-      ...JSON.parse(savedValue),
-    };
-  } catch {
-    return fallback;
-  }
-}
-
-function mergePermissions(savedPermissions) {
-  if (!Array.isArray(savedPermissions)) return defaultPermissions;
-
-  return defaultPermissions.map((defaultPermission) => {
-    const foundPermission = savedPermissions.find(
-      (permission) => permission.id === defaultPermission.id,
-    );
-
-    if (!foundPermission) return defaultPermission;
-
-    return {
-      ...defaultPermission,
-      kasirAccess: Boolean(foundPermission.kasirAccess),
-    };
-  });
-}
-
-function readPermissions() {
-  const savedPermissions = localStorage.getItem(PERMISSION_STORAGE_KEY);
-
-  if (!savedPermissions) return defaultPermissions;
-
-  try {
-    return mergePermissions(JSON.parse(savedPermissions));
-  } catch {
-    return defaultPermissions;
-  }
-}
-
-function writePermissions(permissions) {
-  const payload = permissions.map((permission) => ({
-    id: permission.id,
-    name: permission.name,
-    kasirAccess: Boolean(permission.kasirAccess),
-  }));
-
-  localStorage.setItem(PERMISSION_STORAGE_KEY, JSON.stringify(payload));
-  window.dispatchEvent(new Event("nikky_permissions_updated"));
-}
-
 function Card({ children, className = "" }) {
   return (
     <div
-      className={`rounded-[24px] border border-gray-200 bg-white shadow-sm ${className}`}
+      className={`rounded-[24px] border border-[#f1d8c8] bg-white shadow-sm ${className}`}
     >
       {children}
     </div>
@@ -188,13 +43,13 @@ function Card({ children, className = "" }) {
 function SectionTitle({ icon: Icon, title, description }) {
   return (
     <div className="mb-5 flex items-start gap-3">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-[#0B7FC3]">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#fff1f1] text-[#d50000]">
         <Icon className="h-5 w-5" />
       </div>
 
       <div>
-        <h2 className="text-xl font-black text-gray-950">{title}</h2>
-        <p className="mt-1 text-sm font-medium leading-relaxed text-gray-500">
+        <h2 className="text-xl font-black text-[#241313]">{title}</h2>
+        <p className="mt-1 text-sm font-medium leading-relaxed text-[#8a6f66]">
           {description}
         </p>
       </div>
@@ -205,7 +60,7 @@ function SectionTitle({ icon: Icon, title, description }) {
 function Field({ label, children }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-black text-gray-700">
+      <span className="mb-2 block text-sm font-black text-[#5f4b45]">
         {label}
       </span>
       {children}
@@ -217,7 +72,7 @@ function TextInput(props) {
   return (
     <input
       {...props}
-      className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-800 outline-none transition focus:border-[#0B7FC3] focus:bg-white focus:ring-4 focus:ring-sky-100"
+      className="w-full rounded-2xl border border-[#f1d8c8] bg-[#fffaf3] px-4 py-3 text-sm font-bold text-[#241313] outline-none transition focus:border-[#d50000] focus:bg-white focus:ring-4 focus:ring-[#fee2e2]"
     />
   );
 }
@@ -226,7 +81,7 @@ function TextArea(props) {
   return (
     <textarea
       {...props}
-      className="min-h-[110px] w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-800 outline-none transition focus:border-[#0B7FC3] focus:bg-white focus:ring-4 focus:ring-sky-100"
+      className="min-h-[110px] w-full resize-none rounded-2xl border border-[#f1d8c8] bg-[#fffaf3] px-4 py-3 text-sm font-bold text-[#241313] outline-none transition focus:border-[#d50000] focus:bg-white focus:ring-4 focus:ring-[#fee2e2]"
     />
   );
 }
@@ -238,24 +93,24 @@ function ToggleRow({ title, description, checked, onChange, icon: Icon }) {
       onClick={onChange}
       className={`flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition ${
         checked
-          ? "border-sky-200 bg-sky-50"
-          : "border-gray-200 bg-white hover:bg-gray-50"
+          ? "border-[#f3d6c4] bg-[#fff1f1]"
+          : "border-[#f1d8c8] bg-white hover:bg-[#fffaf3]"
       }`}
     >
       <div className="flex min-w-0 items-start gap-3">
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
             checked
-              ? "bg-white text-[#0B7FC3] ring-1 ring-sky-100"
-              : "bg-gray-100 text-gray-500"
+              ? "bg-white text-[#d50000] ring-1 ring-[#fee2e2]"
+              : "bg-[#fef6ec] text-[#8a6f66]"
           }`}
         >
           <Icon className="h-5 w-5" />
         </div>
 
         <div>
-          <p className="font-black text-gray-950">{title}</p>
-          <p className="mt-1 text-sm font-medium leading-relaxed text-gray-500">
+          <p className="font-black text-[#241313]">{title}</p>
+          <p className="mt-1 text-sm font-medium leading-relaxed text-[#8a6f66]">
             {description}
           </p>
         </div>
@@ -263,7 +118,7 @@ function ToggleRow({ title, description, checked, onChange, icon: Icon }) {
 
       <div
         className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
-          checked ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"
+          checked ? "bg-green-50 text-green-700" : "bg-[#fef6ec] text-[#8a6f66]"
         }`}
       >
         {checked ? "Aktif" : "Nonaktif"}
@@ -282,16 +137,16 @@ function PermissionCard({ permission, onToggle }) {
       onClick={() => onToggle(permission.id)}
       className={`rounded-[22px] border p-4 text-left transition ${
         isActive
-          ? "border-sky-200 bg-sky-50 shadow-sm"
-          : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+          ? "border-[#f3d6c4] bg-[#fff1f1] shadow-sm"
+          : "border-[#f1d8c8] bg-white hover:border-[#f3d6c4] hover:bg-[#fffaf3]"
       }`}
     >
       <div className="mb-4 flex items-start justify-between gap-3">
         <div
           className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
             isActive
-              ? "bg-white text-[#0B7FC3] ring-1 ring-sky-100"
-              : "bg-gray-100 text-gray-500"
+              ? "bg-white text-[#d50000] ring-1 ring-[#fee2e2]"
+              : "bg-[#fef6ec] text-[#8a6f66]"
           }`}
         >
           <Icon className="h-6 w-6" />
@@ -301,7 +156,7 @@ function PermissionCard({ permission, onToggle }) {
           className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black ${
             isActive
               ? "bg-green-50 text-green-700 ring-1 ring-green-100"
-              : "bg-gray-100 text-gray-500"
+              : "bg-[#fef6ec] text-[#8a6f66]"
           }`}
         >
           {isActive ? (
@@ -315,7 +170,7 @@ function PermissionCard({ permission, onToggle }) {
 
       <div>
         <div className="flex items-center gap-2">
-          <h3 className="font-black text-gray-950">{permission.name}</h3>
+          <h3 className="font-black text-[#241313]">{permission.name}</h3>
 
           {permission.recommended && (
             <span className="rounded-full bg-green-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-green-700">
@@ -324,7 +179,7 @@ function PermissionCard({ permission, onToggle }) {
           )}
         </div>
 
-        <p className="mt-2 text-sm font-medium leading-relaxed text-gray-500">
+        <p className="mt-2 text-sm font-medium leading-relaxed text-[#8a6f66]">
           {permission.description}
         </p>
       </div>
@@ -334,188 +189,202 @@ function PermissionCard({ permission, onToggle }) {
 
 function PengaturanPage() {
   const [activeTab, setActiveTab] = useState("profil");
-  const [permissions, setPermissions] = useState(defaultPermissions);
-  const [storeSettings, setStoreSettings] = useState(defaultStoreSettings);
-  const [stockSettings, setStockSettings] = useState(defaultStockSettings);
-  const [transactionSettings, setTransactionSettings] = useState(
-    defaultTransactionSettings,
-  );
+  const [settings, setSettings] = useState(null);
+  const [permissions, setPermissions] = useState([]);
   const [isSaved, setIsSaved] = useState(false);
   const [savedAt, setSavedAt] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    setPermissions(readPermissions());
-    setStoreSettings(readJsonStorage(STORE_SETTING_KEY, defaultStoreSettings));
-    setStockSettings(readJsonStorage(STOCK_SETTING_KEY, defaultStockSettings));
-    setTransactionSettings(
-      readJsonStorage(TRANSACTION_SETTING_KEY, defaultTransactionSettings),
-    );
+    fetchSettings();
   }, []);
 
+  const fetchSettings = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await api.getOwnerSettings();
+      setSettings(data);
+      
+      // Map permissions from RolePermissionPage logic or a similar API if needed
+      // For now, we'll assume permissions are managed via RolePermissionPage, 
+      // but we can mirror them here if we want. 
+      // The user request says "Tab Akses Kasir... berjalan dengan benar".
+      // We will fetch them from the RolePermission API to be consistent.
+      const permData = await api.getOwnerRolePermissions();
+      setPermissions(permData.permissions.map(p => ({
+        id: p.permission_id,
+        name: p.feature_name,
+        description: p.description,
+        kasirAccess: p.raw?.cashier_access ?? false,
+        recommended: p.permission_id === 'cashier_pos' || p.permission_id === 'cashier_shift' || p.permission_id === 'cashier_transactions',
+        icon: getIconForPermission(p.permission_id)
+      })));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  function getIconForPermission(id) {
+    const icons = {
+      'cashier_pos': ShoppingCart,
+      'cashier_shift': Clock3,
+      'cashier_transactions': ReceiptText,
+      'barang': Boxes,
+      'laporan': LayoutDashboard,
+      'pengeluaran': WalletCards,
+      'pengaturan': Settings,
+    };
+    return icons[id] || Settings;
+  }
+
   const activePermissionCount = useMemo(() => {
-    return permissions.filter((permission) => permission.kasirAccess).length;
+    return permissions.filter((p) => p.kasirAccess).length;
   }, [permissions]);
 
-  const saveAllSettings = () => {
-    writePermissions(permissions);
-    localStorage.setItem(STORE_SETTING_KEY, JSON.stringify(storeSettings));
-    localStorage.setItem(STOCK_SETTING_KEY, JSON.stringify(stockSettings));
-    localStorage.setItem(
-      TRANSACTION_SETTING_KEY,
-      JSON.stringify(transactionSettings),
-    );
+  const saveAllSettings = async () => {
+    try {
+      const payload = {
+        profile: {
+          store_name: settings.profile.store_name,
+          owner_name: settings.profile.owner_name,
+          phone: settings.profile.phone,
+          address: settings.profile.address,
+          active_branch_id: settings.profile.active_branch_id,
+        },
+        cashier_access: {
+          allow_discount: settings.cashier_access.allow_discount,
+          allow_manual_price: settings.cashier_access.allow_manual_price,
+          allow_cancel_transaction: settings.cashier_access.allow_cancel_transaction,
+          allow_view_stock: settings.cashier_access.allow_view_stock,
+        },
+        stock_expired: {
+          low_stock_threshold: settings.stock_expired.low_stock_threshold,
+          expired_warning_days: settings.stock_expired.expired_warning_days,
+          show_expired_alert: settings.stock_expired.show_expired_alert,
+          block_expired_sale: settings.stock_expired.block_expired_sale,
+          allow_negative_stock: settings.stock_expired.allow_negative_stock,
+        },
+        transaction: {
+          auto_print_receipt: settings.transaction.auto_print_receipt,
+          require_shift_open: settings.transaction.require_shift_open,
+          payment_methods: settings.transaction.payment_methods,
+        },
+        receipt: {
+          store_header: settings.receipt.store_header,
+          footer_note: settings.receipt.footer_note,
+          show_cashier_name: settings.receipt.show_cashier_name,
+          show_branch_name: settings.receipt.show_branch_name,
+          show_phone: settings.receipt.show_phone,
+          show_address: settings.receipt.show_address,
+        },
+      };
 
-    setSavedAt(
-      new Date().toLocaleTimeString("id-ID", {
+      await api.updateOwnerSettings(payload);
+      
+      setSavedAt(new Date().toLocaleTimeString("id-ID", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
-      }),
-    );
-    setIsSaved(true);
-
-    setTimeout(() => setIsSaved(false), 4000);
+      }));
+      setIsSaved(true);
+      await fetchSettings();
+      setTimeout(() => setIsSaved(false), 4000);
+    } catch (err) {
+      alert("Gagal menyimpan: " + err.message);
+    }
   };
 
-  const resetAllSettings = () => {
-    const confirmReset = confirm(
-      "Yakin ingin mengembalikan semua pengaturan ke default?",
-    );
-
-    if (!confirmReset) return;
-
-    setPermissions(defaultPermissions);
-    setStoreSettings(defaultStoreSettings);
-    setStockSettings(defaultStockSettings);
-    setTransactionSettings(defaultTransactionSettings);
+  const resetAllSettings = async () => {
+    if (!confirm("Yakin ingin mengembalikan semua pengaturan ke default?")) return;
+    await fetchSettings();
     setIsSaved(false);
   };
 
-  const clearLocalData = () => {
-    const confirmClear = confirm(
-      "Yakin ingin menghapus data pengaturan lokal? Data login tidak ikut dihapus.",
-    );
-
-    if (!confirmClear) return;
-
-    localStorage.removeItem(PERMISSION_STORAGE_KEY);
-    localStorage.removeItem(STORE_SETTING_KEY);
-    localStorage.removeItem(STOCK_SETTING_KEY);
-    localStorage.removeItem(TRANSACTION_SETTING_KEY);
-
-    setPermissions(defaultPermissions);
-    setStoreSettings(defaultStoreSettings);
-    setStockSettings(defaultStockSettings);
-    setTransactionSettings(defaultTransactionSettings);
-    window.dispatchEvent(new Event("nikky_permissions_updated"));
+  const togglePermission = async (permissionId) => {
+    setIsSaved(false);
+    const permission = permissions.find(p => p.id === permissionId);
+    if (!permission) return;
+    
+    try {
+      await api.updateSinglePermissionApi(permissionId, !permission.kasirAccess);
+      setPermissions(prev => prev.map(p => p.id === permissionId ? {...p, kasirAccess: !p.kasirAccess} : p));
+    } catch (err) {
+      alert("Gagal memperbarui permission: " + err.message);
+    }
   };
 
-  const togglePermission = (permissionId) => {
+  const updateSetting = (group, key, value) => {
     setIsSaved(false);
-
-    setPermissions((currentPermissions) =>
-      currentPermissions.map((permission) => {
-        if (permission.id !== permissionId) return permission;
-
-        return {
-          ...permission,
-          kasirAccess: !permission.kasirAccess,
-        };
-      }),
-    );
-  };
-
-  const setRecommendedPermission = () => {
-    setIsSaved(false);
-
-    setPermissions((currentPermissions) =>
-      currentPermissions.map((permission) => ({
-        ...permission,
-        kasirAccess: Boolean(permission.recommended),
-      })),
-    );
-  };
-
-  const enableAllPermission = () => {
-    setIsSaved(false);
-
-    setPermissions((currentPermissions) =>
-      currentPermissions.map((permission) => ({
-        ...permission,
-        kasirAccess: true,
-      })),
-    );
-  };
-
-  const updateStoreSetting = (key, value) => {
-    setIsSaved(false);
-    setStoreSettings((currentSettings) => ({
-      ...currentSettings,
-      [key]: value,
+    setSettings(prev => ({
+      ...prev,
+      [group]: {
+        ...prev[group],
+        [key]: value
+      }
     }));
   };
 
-  const updateStockSetting = (key, value) => {
-    setIsSaved(false);
-    setStockSettings((currentSettings) => ({
-      ...currentSettings,
-      [key]: value,
-    }));
-  };
+  if (isLoading) return (
+    <div className="flex h-full items-center justify-center">
+      <div className="flex flex-col items-center gap-2">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#d50000] border-t-transparent"></div>
+        <p className="text-sm font-bold text-[#5f4b45]">Memuat Pengaturan...</p>
+      </div>
+    </div>
+  );
 
-  const updateTransactionSetting = (key, value) => {
-    setIsSaved(false);
-    setTransactionSettings((currentSettings) => ({
-      ...currentSettings,
-      [key]: value,
-    }));
-  };
+  if (error) return (
+    <div className="flex h-full items-center justify-center">
+      <div className="rounded-2xl bg-red-50 p-6 text-center">
+        <p className="text-red-600 font-bold">{error}</p>
+        <button onClick={fetchSettings} className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-white text-sm font-bold">Coba Lagi</button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] px-4 py-5 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#fffaf3] px-4 py-5 sm:px-6 lg:px-8">
       <div className="mb-5 grid gap-4 md:grid-cols-4">
         <Card className="p-5">
-          <p className="text-sm font-semibold text-gray-500">Profil Toko</p>
-          <p className="mt-2 truncate text-xl font-black text-gray-950">
-            {storeSettings.storeName}
+          <p className="text-sm font-semibold text-[#8a6f66]">Profil Toko</p>
+          <p className="mt-2 truncate text-xl font-black text-[#241313]">
+            {settings.profile.store_name}
           </p>
-          <p className="mt-1 text-xs font-semibold text-gray-400">
-            {storeSettings.branchName}
+          <p className="mt-1 text-xs font-semibold text-[#8a6f66]">
+            {settings.profile.active_branch_name}
           </p>
         </Card>
 
         <Card className="p-5">
-          <p className="text-sm font-semibold text-gray-500">Akses Kasir</p>
-          <p className="mt-2 text-3xl font-black text-[#0B7FC3]">
+          <p className="text-sm font-semibold text-[#8a6f66]">Akses Kasir</p>
+          <p className="mt-2 text-3xl font-black text-[#d50000]">
             {activePermissionCount}
           </p>
-          <p className="mt-1 text-xs font-semibold text-gray-400">
+          <p className="mt-1 text-xs font-semibold text-[#8a6f66]">
             Menu aktif untuk kasir
           </p>
         </Card>
 
         <Card className="p-5">
-          <p className="text-sm font-semibold text-gray-500">Peringatan Expired</p>
+          <p className="text-sm font-semibold text-[#8a6f66]">Peringatan Expired</p>
           <p className="mt-2 text-3xl font-black text-orange-600">
-            {stockSettings.expiryWarningDays}
+            {settings.stock_expired.expired_warning_days}
           </p>
-          <p className="mt-1 text-xs font-semibold text-gray-400">
+          <p className="mt-1 text-xs font-semibold text-[#8a6f66]">
             Hari sebelum expired
           </p>
         </Card>
 
         <Card className="p-5">
-          <p className="text-sm font-semibold text-gray-500">Pembayaran</p>
+          <p className="text-sm font-semibold text-[#8a6f66]">Pembayaran</p>
           <p className="mt-2 text-3xl font-black text-green-600">
-            {
-              [
-                transactionSettings.allowCash,
-                transactionSettings.allowQris,
-                transactionSettings.allowTransfer,
-              ].filter(Boolean).length
-            }
+            {settings.transaction.payment_methods.length}
           </p>
-          <p className="mt-1 text-xs font-semibold text-gray-400">
+          <p className="mt-1 text-xs font-semibold text-[#8a6f66]">
             Metode aktif
           </p>
         </Card>
@@ -535,8 +404,8 @@ function PengaturanPage() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex shrink-0 items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
                     isActive
-                      ? "bg-[#0B7FC3] text-white shadow-sm"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      ? "bg-[#d50000] text-white shadow-sm"
+                      : "bg-[#fff7ed] text-[#5f4b45] hover:bg-[#fef2f2]"
                   }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -550,7 +419,7 @@ function PengaturanPage() {
             <button
               type="button"
               onClick={resetAllSettings}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-gray-100 px-4 py-3 text-sm font-black text-gray-700 transition hover:bg-gray-200"
+              className="flex items-center justify-center gap-2 rounded-2xl bg-[#fff7ed] px-4 py-3 text-sm font-black text-[#5f4b45] transition hover:bg-[#fef2f2]"
             >
               <RotateCcw className="h-4 w-4" />
               Reset
@@ -559,7 +428,7 @@ function PengaturanPage() {
             <button
               type="button"
               onClick={saveAllSettings}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-[#0B7FC3] px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#096EA8]"
+              className="flex items-center justify-center gap-2 rounded-2xl bg-[#d50000] px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#c40000]"
             >
               <Save className="h-4 w-4" />
               Simpan Semua
@@ -587,47 +456,42 @@ function PengaturanPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Nama Toko">
               <TextInput
-                value={storeSettings.storeName}
-                onChange={(event) =>
-                  updateStoreSetting("storeName", event.target.value)
-                }
+                value={settings.profile.store_name}
+                onChange={(e) => updateSetting("profile", "store_name", e.target.value)}
               />
             </Field>
 
             <Field label="Nama Owner">
               <TextInput
-                value={storeSettings.ownerName}
-                onChange={(event) =>
-                  updateStoreSetting("ownerName", event.target.value)
-                }
+                value={settings.profile.owner_name}
+                onChange={(e) => updateSetting("profile", "owner_name", e.target.value)}
               />
             </Field>
 
             <Field label="Cabang Aktif">
-              <TextInput
-                value={storeSettings.branchName}
-                onChange={(event) =>
-                  updateStoreSetting("branchName", event.target.value)
-                }
-              />
+              <select
+                className="w-full rounded-2xl border border-[#f1d8c8] bg-[#fffaf3] px-4 py-3 text-sm font-bold text-[#241313] outline-none transition focus:border-[#d50000] focus:bg-white focus:ring-4 focus:ring-[#fee2e2]"
+                value={settings.profile.active_branch_id}
+                onChange={(e) => updateSetting("profile", "active_branch_id", Number(e.target.value))}
+              >
+                {settings.branches.map(branch => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
             </Field>
 
             <Field label="Nomor Telepon">
               <TextInput
-                value={storeSettings.phone}
-                onChange={(event) =>
-                  updateStoreSetting("phone", event.target.value)
-                }
+                value={settings.profile.phone}
+                onChange={(e) => updateSetting("profile", "phone", e.target.value)}
               />
             </Field>
 
             <div className="md:col-span-2">
               <Field label="Alamat Toko">
                 <TextArea
-                  value={storeSettings.address}
-                  onChange={(event) =>
-                    updateStoreSetting("address", event.target.value)
-                  }
+                  value={settings.profile.address}
+                  onChange={(e) => updateSetting("profile", "address", e.target.value)}
                 />
               </Field>
             </div>
@@ -643,26 +507,6 @@ function PengaturanPage() {
               title="Akses Menu Kasir"
               description="Owner bisa memilih menu yang muncul di sidebar kasir."
             />
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                onClick={setRecommendedPermission}
-                className="flex items-center justify-center gap-2 rounded-2xl bg-gray-100 px-4 py-3 text-sm font-black text-gray-700 transition hover:bg-gray-200"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Default Kasir
-              </button>
-
-              <button
-                type="button"
-                onClick={enableAllPermission}
-                className="flex items-center justify-center gap-2 rounded-2xl bg-sky-50 px-4 py-3 text-sm font-black text-[#0B7FC3] transition hover:bg-sky-100"
-              >
-                <BadgeCheck className="h-4 w-4" />
-                Aktifkan Semua
-              </button>
-            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -690,13 +534,8 @@ function PengaturanPage() {
               <TextInput
                 type="number"
                 min="0"
-                value={stockSettings.defaultMinStock}
-                onChange={(event) =>
-                  updateStockSetting(
-                    "defaultMinStock",
-                    Number(event.target.value),
-                  )
-                }
+                value={settings.stock_expired.low_stock_threshold}
+                onChange={(e) => updateSetting("stock_expired", "low_stock_threshold", Number(e.target.value))}
               />
             </Field>
 
@@ -704,49 +543,35 @@ function PengaturanPage() {
               <TextInput
                 type="number"
                 min="1"
-                value={stockSettings.expiryWarningDays}
-                onChange={(event) =>
-                  updateStockSetting(
-                    "expiryWarningDays",
-                    Number(event.target.value),
-                  )
-                }
+                value={settings.stock_expired.expired_warning_days}
+                onChange={(e) => updateSetting("stock_expired", "expired_warning_days", Number(e.target.value))}
               />
             </Field>
           </div>
 
           <div className="mt-5 grid gap-3 lg:grid-cols-3">
             <ToggleRow
-              title="Tampilkan Map Lokasi"
-              description="Menampilkan map freezer/lokasi penyimpanan di Monitoring Stok."
-              icon={Boxes}
-              checked={stockSettings.showWarehouseMap}
-              onChange={() =>
-                updateStockSetting(
-                  "showWarehouseMap",
-                  !stockSettings.showWarehouseMap,
-                )
-              }
-            />
-
-            <ToggleRow
-              title="Peringatan Stok Menipis"
-              description="Menandai produk yang stoknya sama atau di bawah minimum."
-              icon={BellRing}
-              checked={stockSettings.lowStockAlert}
-              onChange={() =>
-                updateStockSetting("lowStockAlert", !stockSettings.lowStockAlert)
-              }
-            />
-
-            <ToggleRow
               title="Peringatan Expired"
-              description="Menandai produk expired atau mendekati expired."
+              description="Tampilkan peringatan untuk produk yang mendekati expired."
               icon={BellRing}
-              checked={stockSettings.expiredAlert}
-              onChange={() =>
-                updateStockSetting("expiredAlert", !stockSettings.expiredAlert)
-              }
+              checked={settings.stock_expired.show_expired_alert}
+              onChange={() => updateSetting("stock_expired", "show_expired_alert", !settings.stock_expired.show_expired_alert)}
+            />
+
+            <ToggleRow
+              title="Blokir Penjualan Expired"
+              description="Cegah transaksi produk yang sudah expired."
+              icon={BellRing}
+              checked={settings.stock_expired.block_expired_sale}
+              onChange={() => updateSetting("stock_expired", "block_expired_sale", !settings.stock_expired.block_expired_sale)}
+            />
+
+            <ToggleRow
+              title="Izinkan Stok Negatif"
+              description="Memperbolehkan stok produk menjadi minus."
+              icon={Boxes}
+              checked={settings.stock_expired.allow_negative_stock}
+              onChange={() => updateSetting("stock_expired", "allow_negative_stock", !settings.stock_expired.allow_negative_stock)}
             />
           </div>
         </Card>
@@ -765,69 +590,74 @@ function PengaturanPage() {
               title="Pembayaran Tunai"
               description="Aktifkan pembayaran menggunakan uang tunai."
               icon={WalletCards}
-              checked={transactionSettings.allowCash}
-              onChange={() =>
-                updateTransactionSetting("allowCash", !transactionSettings.allowCash)
-              }
+              checked={settings.transaction.payment_methods.includes("cash")}
+              onChange={() => {
+                const methods = settings.transaction.payment_methods;
+                const next = methods.includes("cash") 
+                  ? methods.filter(m => m !== "cash") 
+                  : [...methods, "cash"];
+                updateSetting("transaction", "payment_methods", next);
+              }}
             />
 
             <ToggleRow
               title="Pembayaran QRIS"
               description="Aktifkan metode pembayaran QRIS."
               icon={CreditCard}
-              checked={transactionSettings.allowQris}
-              onChange={() =>
-                updateTransactionSetting("allowQris", !transactionSettings.allowQris)
-              }
+              checked={settings.transaction.payment_methods.includes("qris")}
+              onChange={() => {
+                const methods = settings.transaction.payment_methods;
+                const next = methods.includes("qris") 
+                  ? methods.filter(m => m !== "qris") 
+                  : [...methods, "qris"];
+                updateSetting("transaction", "payment_methods", next);
+              }}
             />
 
             <ToggleRow
               title="Pembayaran Transfer"
               description="Aktifkan metode pembayaran transfer bank."
               icon={CreditCard}
-              checked={transactionSettings.allowTransfer}
-              onChange={() =>
-                updateTransactionSetting(
-                  "allowTransfer",
-                  !transactionSettings.allowTransfer,
-                )
-              }
+              checked={settings.transaction.payment_methods.includes("transfer")}
+              onChange={() => {
+                const methods = settings.transaction.payment_methods;
+                const next = methods.includes("transfer") 
+                  ? methods.filter(m => m !== "transfer") 
+                  : [...methods, "transfer"];
+                updateSetting("transaction", "payment_methods", next);
+              }}
             />
 
             <ToggleRow
               title="Diskon Transaksi"
               description="Izinkan kasir memberi diskon saat pembayaran."
               icon={ReceiptText}
-              checked={transactionSettings.allowDiscount}
-              onChange={() =>
-                updateTransactionSetting(
-                  "allowDiscount",
-                  !transactionSettings.allowDiscount,
-                )
-              }
+              checked={settings.cashier_access.allow_discount}
+              onChange={() => updateSetting("cashier_access", "allow_discount", !settings.cashier_access.allow_discount)}
             />
 
             <ToggleRow
               title="Void / Batalkan Transaksi"
               description="Batasi fitur pembatalan transaksi agar hanya owner yang bisa."
               icon={ShieldCheck}
-              checked={transactionSettings.allowVoid}
-              onChange={() =>
-                updateTransactionSetting("allowVoid", !transactionSettings.allowVoid)
-              }
+              checked={settings.cashier_access.allow_cancel_transaction}
+              onChange={() => updateSetting("cashier_access", "allow_cancel_transaction", !settings.cashier_access.allow_cancel_transaction)}
             />
 
             <ToggleRow
-              title="Cetak Struk"
-              description="Tampilkan opsi cetak struk setelah transaksi berhasil."
+              title="Auto Cetak Struk"
+              description="Cetak struk otomatis setelah transaksi berhasil."
               icon={Printer}
-              checked={transactionSettings.printReceipt}
-              onChange={() =>
-                updateTransactionSetting(
-                  "printReceipt",
-                  !transactionSettings.printReceipt,
-                )
-              }
+              checked={settings.transaction.auto_print_receipt}
+              onChange={() => updateSetting("transaction", "auto_print_receipt", !settings.transaction.auto_print_receipt)}
+            />
+
+            <ToggleRow
+              title="Wajib Buka Shift"
+              description="Kasir harus membuka shift sebelum melakukan transaksi."
+              icon={Clock3}
+              checked={settings.transaction.require_shift_open}
+              onChange={() => updateSetting("transaction", "require_shift_open", !settings.transaction.require_shift_open)}
             />
           </div>
         </Card>
@@ -844,32 +674,30 @@ function PengaturanPage() {
           <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
             <Field label="Footer Struk">
               <TextArea
-                value={storeSettings.footerReceipt}
-                onChange={(event) =>
-                  updateStoreSetting("footerReceipt", event.target.value)
-                }
+                value={settings.receipt.footer_note}
+                onChange={(e) => updateSetting("receipt", "footer_note", e.target.value)}
               />
             </Field>
 
-            <div className="rounded-[22px] border border-dashed border-gray-300 bg-gray-50 p-5">
-              <p className="text-center text-sm font-black uppercase tracking-[0.18em] text-gray-400">
+            <div className="rounded-[22px] border border-dashed border-[#f1d8c8] bg-[#fffaf3] p-5">
+              <p className="text-center text-sm font-black uppercase tracking-[0.18em] text-[#8a6f66]">
                 Preview Struk
               </p>
 
               <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
-                <p className="text-center text-base font-black text-gray-950">
-                  {storeSettings.storeName}
+                <p className="text-center text-base font-black text-[#241313]">
+                  {settings.profile.store_name}
                 </p>
-                <p className="mt-1 text-center text-xs font-semibold text-gray-500">
-                  {storeSettings.branchName}
+                <p className="mt-1 text-center text-xs font-semibold text-[#8a6f66]">
+                  {settings.profile.active_branch_name}
                 </p>
-                <p className="mt-1 text-center text-xs font-semibold text-gray-500">
-                  {storeSettings.phone}
+                <p className="mt-1 text-center text-xs font-semibold text-[#8a6f66]">
+                  {settings.profile.phone}
                 </p>
 
-                <div className="my-4 border-t border-dashed border-gray-300" />
+                <div className="my-4 border-t border-dashed border-[#f1d8c8]" />
 
-                <div className="space-y-2 text-sm font-semibold text-gray-600">
+                <div className="space-y-2 text-sm font-semibold text-[#5f4b45]">
                   <div className="flex justify-between">
                     <span>Nugget Ayam x1</span>
                     <span>Rp 35.000</span>
@@ -880,28 +708,19 @@ function PengaturanPage() {
                   </div>
                 </div>
 
-                <div className="my-4 border-t border-dashed border-gray-300" />
+                <div className="my-4 border-t border-dashed border-[#f1d8c8]" />
 
-                <div className="flex justify-between text-base font-black text-gray-950">
+                <div className="flex justify-between text-base font-black text-[#241313]">
                   <span>Total</span>
                   <span>Rp 77.000</span>
                 </div>
 
-                <p className="mt-5 text-center text-xs font-semibold leading-relaxed text-gray-500">
-                  {storeSettings.footerReceipt}
+                <p className="mt-5 text-center text-xs font-semibold leading-relaxed text-[#8a6f66]">
+                  {settings.receipt.footer_note}
                 </p>
               </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={clearLocalData}
-            className="mt-5 flex items-center justify-center gap-2 rounded-2xl bg-red-50 px-4 py-3 text-sm font-black text-red-600 transition hover:bg-red-100"
-          >
-            <Trash2 className="h-4 w-4" />
-            Hapus Data Pengaturan Lokal
-          </button>
         </Card>
       )}
     </div>

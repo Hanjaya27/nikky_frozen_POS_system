@@ -59,6 +59,10 @@ function AdminRiwayatStok() {
         return { label: "Mutasi ke Toko", icon: ArrowRightLeft, color: "text-blue-700", bg: "bg-blue-50 border-blue-200" };
       case "restock_warehouse":
         return { label: "Restock Gudang", icon: Warehouse, color: "text-green-700", bg: "bg-green-50 border-green-200" };
+      case "restock":
+        return { label: "Restok", icon: Warehouse, color: "text-green-700", bg: "bg-green-50 border-green-200" };
+      case "sale":
+        return { label: "Penjualan", icon: PackagePlus, color: "text-orange-700", bg: "bg-orange-50 border-orange-200" };
       case "product_created":
         return { label: "Produk Baru", icon: PackagePlus, color: "text-purple-700", bg: "bg-purple-50 border-purple-200" };
       case "product_updated":
@@ -104,8 +108,8 @@ function AdminRiwayatStok() {
               className="rounded-xl border border-[#EBCDB8] bg-white px-4 py-2.5 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503] min-w-[200px]"
             >
               <option value="">Semua Tipe Aktivitas</option>
-              <option value="mutation_to_store">Mutasi ke Toko</option>
-              <option value="restock_warehouse">Restock Gudang</option>
+              <option value="restock">Restock Stok</option>
+              <option value="sale">Penjualan</option>
               <option value="stock_adjustment">Koreksi Stok</option>
               <option value="transfer_out">Transfer Keluar</option>
               <option value="transfer_in">Transfer Masuk</option>
@@ -135,8 +139,7 @@ function AdminRiwayatStok() {
                   <th className="px-5 py-4">Produk</th>
                   <th className="px-5 py-4">Aktivitas</th>
                   <th className="px-5 py-4 text-center">Jumlah</th>
-                  <th className="px-5 py-4 text-center">Stok Toko</th>
-                  <th className="px-5 py-4 text-center">Stok Gudang</th>
+                  <th className="px-5 py-4 text-center">Perubahan Stok</th>
                   <th className="px-5 py-4">Admin</th>
                   <th className="px-5 py-4">Catatan</th>
                 </tr>
@@ -168,11 +171,6 @@ function AdminRiwayatStok() {
                         <span className="text-[#7A6258] line-through decoration-[#C80503]/50 mr-1 text-xs">{h.before_store_stock}</span>
                         <ArrowRightLeft className="inline w-3 h-3 text-[#EBCDB8] mx-1" />
                         <span className="font-black text-[#2A1712] ml-1">{h.after_store_stock}</span>
-                      </td>
-                      <td className="px-5 py-4 text-center whitespace-nowrap">
-                        <span className="text-[#7A6258] line-through decoration-[#C80503]/50 mr-1 text-xs">{h.before_warehouse_stock}</span>
-                        <ArrowRightLeft className="inline w-3 h-3 text-[#EBCDB8] mx-1" />
-                        <span className="font-black text-[#2A1712] ml-1">{h.after_warehouse_stock}</span>
                       </td>
                       <td className="px-5 py-4">
                         <span className="font-semibold text-[#7A6258]">

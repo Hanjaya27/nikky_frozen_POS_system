@@ -24,7 +24,7 @@ function AdminMutasiPage() {
   const [targetBranchId, setTargetBranchId] = useState("");
   
   const [batchItems, setBatchItems] = useState([]);
-  const [batchType, setBatchType] = useState("batch_restock"); // 'batch_restock', 'batch_mutation_to_store', 'batch_transfer_branch', 'batch_stock_adjustment'
+  const [batchType, setBatchType] = useState("restock");
 
   const fetchProducts = async () => {
     try {
@@ -54,24 +54,22 @@ function AdminMutasiPage() {
   }, [currentUser?.branch_id]);
 
   const getItemError = (item) => {
-    if (batchType === "adjust") {
-      const ss = item.store_stock_new;
-      const ws = item.warehouse_stock_new;
-      if (ss === "" || ws === "") return "Stok fisik harus diisi.";
-      const ssInt = parseInt(ss, 10);
-      const wsInt = parseInt(ws, 10);
-      if (isNaN(ssInt) || ssInt < 0 || isNaN(wsInt) || wsInt < 0) return "Stok fisik harus >= 0.";
-      return null;
-    } else {
-      const amountStr = item.batchAmount;
-      if (amountStr === "") return "Jumlah wajib diisi.";
-      const amount = parseInt(amountStr, 10);
-      if (isNaN(amount) || amount <= 0) return "Jumlah harus > 0.";
-      if ((batchType === "mutate" || batchType === "transfer") && amount > item.warehouse_stock) {
-        return "Jumlah melebihi stok gudang.";
-      }
+    if (batchType === "correction") {
+      const stock = item.stock_new;
+      if (stock === "") return "Stok fisik baru harus diisi.";
+      const stockInt = parseInt(stock, 10);
+      if (isNaN(stockInt) || stockInt < 0) return "Stok fisik baru harus >= 0.";
       return null;
     }
+
+    const amountStr = item.batchAmount;
+    if (amountStr === "") return "Jumlah wajib diisi.";
+    const amount = parseInt(amountStr, 10);
+    if (isNaN(amount) || amount <= 0) return "Jumlah harus > 0.";
+    if (batchType === "transfer" && amount > item.stock) {
+      return "Jumlah melebihi stok saat ini.";
+    }
+    return null;
   };
 
   const hasErrors = batchItems.some(item => getItemError(item) !== null);
@@ -82,11 +80,11 @@ function AdminMutasiPage() {
        return setMessage({ type: "error", text: "Pilih setidaknya satu produk untuk batch." });
     }
 
-    if (batchType === "batch_transfer_branch" && !targetBranchId) {
+    if (batchType === "transfer" && !targetBranchId) {
         return setMessage({ type: "error", text: "Silakan pilih cabang tujuan untuk transfer." });
     }
 
-    if (batchType === "batch_stock_adjustment" && !note.trim()) {
+    if (batchType === "correction" && !note.trim()) {
         return setMessage({ type: "error", text: "Catatan wajib diisi untuk mode Koreksi Stok." });
     }
 
@@ -101,22 +99,28 @@ function AdminMutasiPage() {
 
     try {
       const payloadItems = batchItems.map(item => {
-         if (batchType === "batch_stock_adjustment") {
-             return { product_id: item.id, store_stock: parseInt(item.store_stock_new, 10), warehouse_stock: parseInt(item.warehouse_stock_new, 10) };
+         if (batchType === "correction") {
+             return { product_id: item.id, stock: parseInt(item.stock_new, 10) };
          } else {
              return { product_id: item.id, amount: parseInt(item.batchAmount, 10) };
          }
       });
 
+      const actionMap = {
+        restock: 'batch_restock',
+        transfer: 'batch_transfer_branch',
+        correction: 'batch_stock_adjustment',
+      };
+
       const payload = {
          branch_id: currentUser.branch_id,
          user_id: currentUser.id,
-         action: batchType,
+         action: actionMap[batchType] || batchType,
          note,
          items: payloadItems
       };
       
-      if (batchType === "batch_transfer_branch") {
+      if (batchType === "transfer") {
           payload.target_branch_id = targetBranchId;
       }
 
@@ -144,9 +148,8 @@ function AdminMutasiPage() {
 
   const summary = {
     totalProducts: products.length,
-    totalWarehouse: products.reduce((acc, p) => acc + (parseInt(p.warehouse_stock) || 0), 0),
-    totalStore: products.reduce((acc, p) => acc + (parseInt(p.store_stock) || 0), 0),
-    needAttention: products.filter(p => p.store_stock <= 3).length
+    totalStock: products.reduce((acc, p) => acc + (parseInt(p.stock) || 0), 0),
+    needAttention: products.filter(p => p.stock <= 5).length
   };
 
   if (!currentUser) return null;
@@ -172,8 +175,8 @@ function AdminMutasiPage() {
         </div>
         <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-[#7A6258]">Stok Gudang</p>
-            <p className="mt-1 text-2xl font-black text-[#2A1712]">{summary.totalWarehouse}</p>
+            <p className="text-sm font-bold text-[#7A6258]">Total Stok</p>
+            <p className="mt-1 text-2xl font-black text-[#2A1712]">{summary.totalStock}</p>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFF6EA] text-[#C80503] border border-[#EBCDB8]">
             <Warehouse className="h-6 w-6" />
@@ -181,16 +184,7 @@ function AdminMutasiPage() {
         </div>
         <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-[#7A6258]">Stok Toko</p>
-            <p className="mt-1 text-2xl font-black text-[#2A1712]">{summary.totalStore}</p>
-          </div>
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFF6EA] text-[#C80503] border border-[#EBCDB8]">
-            <PackageCheck className="h-6 w-6" />
-          </div>
-        </div>
-        <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-sm font-bold text-[#7A6258]">Toko Kosong/Menipis</p>
+            <p className="text-sm font-bold text-[#7A6258]">Stok Menipis/Habis</p>
             <p className="mt-1 text-2xl font-black text-[#2A1712]">{summary.needAttention}</p>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFF6EA] text-[#C80503] border border-[#EBCDB8]">
@@ -224,26 +218,25 @@ function AdminMutasiPage() {
                 onClick={() => {
                   setBatchItems(prev => {
                     if (!prev.find(i => i.id === p.id)) {
-                      return [...prev, { ...p, batchAmount: "", store_stock_new: p.store_stock, warehouse_stock_new: p.warehouse_stock }];
+                      return [...prev, { ...p, batchAmount: "", stock_new: p.stock }];
                     }
                     return prev;
                   });
                 }}
                 className={`w-full text-left p-4 rounded-xl transition border hover:shadow-sm ${isSelected ? 'bg-gray-50 border-[#EBCDB8]' : 'bg-white border-[#EBCDB8] hover:border-[#C80503]/50'}`}
               >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-black text-[#2A1712] text-sm">{p.name}</p>
-                    <p className="text-xs font-bold text-[#7A6258] mt-0.5">{p.code}</p>
-                  </div>
-                  <div className="text-right flex flex-col items-end gap-1">
-                    {isSelected && <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#2A1712] text-white border border-[#2A1712]">Dipilih</span>}
-                    <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold border ${p.store_stock <= 0 ? 'bg-red-50 text-red-700 border-red-200' : p.store_stock <= 3 ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                      {p.store_stock <= 0 ? 'Habis' : p.store_stock <= 3 ? 'Menipis' : 'Aman'}
-                    </span>
-                    <p className="text-xs font-black text-[#2A1712]">Gudang: {p.warehouse_stock}</p>
-                    <p className="text-[10px] font-bold text-[#7A6258] mt-0.5">Toko: {p.store_stock}</p>
-                  </div>
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="font-black text-[#2A1712] text-sm">{p.name}</p>
+          <p className="text-xs font-bold text-[#7A6258] mt-0.5">{p.code}</p>
+        </div>
+        <div className="text-right flex flex-col items-end gap-1">
+          {isSelected && <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#2A1712] text-white border border-[#2A1712]">Dipilih</span>}
+          <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold border ${p.stock <= 0 ? 'bg-red-50 text-red-700 border-red-200' : p.stock <= 5 ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+            {p.stock <= 0 ? 'Habis' : p.stock <= 5 ? 'Menipis' : 'Aman'}
+          </span>
+          <p className="text-xs font-black text-[#2A1712]">Stok: {p.stock}</p>
+        </div>
                 </div>
               </button>
             )})}
@@ -267,26 +260,22 @@ function AdminMutasiPage() {
           )}
 
           <form onSubmit={handleAction} className="flex-1 flex flex-col overflow-hidden">
-             <div className="flex flex-wrap gap-4 p-4 bg-white rounded-xl border border-[#EBCDB8] shrink-0 mb-4">
-               <label className="flex items-center gap-2 text-sm font-bold text-[#2A1712] cursor-pointer">
-                 <input type="radio" value="batch_restock" checked={batchType === "batch_restock"} onChange={(e) => setBatchType(e.target.value)} className="accent-[#C80503] w-4 h-4" />
-                 Batch Restock Gudang
-               </label>
-               <label className="flex items-center gap-2 text-sm font-bold text-[#2A1712] cursor-pointer">
-                 <input type="radio" value="batch_mutation_to_store" checked={batchType === "batch_mutation_to_store"} onChange={(e) => setBatchType(e.target.value)} className="accent-[#C80503] w-4 h-4" />
-                 Batch Mutasi ke Toko
-               </label>
-               <label className="flex items-center gap-2 text-sm font-bold text-[#2A1712] cursor-pointer">
-                 <input type="radio" value="batch_transfer_branch" checked={batchType === "batch_transfer_branch"} onChange={(e) => setBatchType(e.target.value)} className="accent-[#C80503] w-4 h-4" />
-                 Batch Transfer Cabang
-               </label>
-               <label className="flex items-center gap-2 text-sm font-bold text-[#2A1712] cursor-pointer">
-                 <input type="radio" value="batch_stock_adjustment" checked={batchType === "batch_stock_adjustment"} onChange={(e) => setBatchType(e.target.value)} className="accent-[#C80503] w-4 h-4" />
-                 Batch Koreksi Stok
-               </label>
-             </div>
-             
-             {batchType === "batch_transfer_branch" && (
+              <div className="flex flex-wrap gap-4 p-4 bg-white rounded-xl border border-[#EBCDB8] shrink-0 mb-4">
+                <label className="flex items-center gap-2 text-sm font-bold text-[#2A1712] cursor-pointer">
+                  <input type="radio" value="restock" checked={batchType === "restock"} onChange={(e) => setBatchType(e.target.value)} className="accent-[#C80503] w-4 h-4" />
+                  Restock Stok
+                </label>
+                <label className="flex items-center gap-2 text-sm font-bold text-[#2A1712] cursor-pointer">
+                  <input type="radio" value="transfer" checked={batchType === "transfer"} onChange={(e) => setBatchType(e.target.value)} className="accent-[#C80503] w-4 h-4" />
+                  Transfer Antar Cabang
+                </label>
+                <label className="flex items-center gap-2 text-sm font-bold text-[#2A1712] cursor-pointer">
+                  <input type="radio" value="correction" checked={batchType === "correction"} onChange={(e) => setBatchType(e.target.value)} className="accent-[#C80503] w-4 h-4" />
+                  Koreksi Stok
+                </label>
+              </div>
+              
+              {batchType === "transfer" && (
                 <div className="p-4 bg-white border border-[#EBCDB8] rounded-xl shrink-0 mb-4">
                   <label className="block text-sm font-bold text-[#7A6258] mb-2">Cabang Tujuan</label>
                   <select
@@ -313,67 +302,59 @@ function AdminMutasiPage() {
                   <div className="overflow-y-auto flex-1 p-0">
                     <table className="w-full text-left text-sm m-0">
                        <thead className="bg-[#FFF6EA] text-[#7A6258] sticky top-0 z-10">
-                         <tr>
-                           <th className="px-4 py-3 border-b border-[#EBCDB8]">Produk</th>
-                           {batchType !== "batch_stock_adjustment" && (
-                             <th className="px-4 py-3 border-b border-[#EBCDB8]">Gudang Saat Ini</th>
-                           )}
-                           <th className={`px-4 py-3 border-b border-[#EBCDB8] ${batchType === "batch_stock_adjustment" ? "w-64" : "w-32"}`}>
-                             {batchType === "batch_stock_adjustment" ? "Stok Fisik Baru (Toko | Gudang)" : "Jumlah"}
-                           </th>
-                           <th className="px-4 py-3 border-b border-[#EBCDB8] w-12 text-center"></th>
-                         </tr>
+                          <tr>
+                            <th className="px-4 py-3 border-b border-[#EBCDB8]">Produk</th>
+                            {batchType !== "correction" && (
+                              <th className="px-4 py-3 border-b border-[#EBCDB8]">Stok Saat Ini</th>
+                            )}
+                            <th className={`px-4 py-3 border-b border-[#EBCDB8] ${batchType === "correction" ? "w-40" : "w-32"}`}>
+                              {batchType === "correction" ? "Stok Fisik Baru" : "Jumlah"}
+                            </th>
+                            <th className="px-4 py-3 border-b border-[#EBCDB8] w-12 text-center"></th>
+                          </tr>
                        </thead>
                        <tbody>
                          {batchItems.map((item, idx) => {
                            const err = getItemError(item);
                            return (
 
-                             <tr key={item.id} className={`border-t border-[#EBCDB8] ${err ? 'bg-red-50/30' : ''}`}>
-                               <td className="px-4 py-3 font-bold text-[#2A1712]">
-                                 {item.name}
-                                 {batchType === "batch_stock_adjustment" && (
-                                     <div className="text-xs font-normal text-[#7A6258] mt-1">Saat ini: {item.store_stock} Toko | {item.warehouse_stock} Gudang</div>
-                                 )}
-                               </td>
-                               {batchType !== "batch_stock_adjustment" && (
-                                 <td className="px-4 py-3 text-[#2A1712] font-bold">{item.warehouse_stock}</td>
-                               )}
-                               <td className="px-4 py-2">
-                                 {batchType === "batch_stock_adjustment" ? (
-                                    <div className="flex flex-col gap-1">
-                                      <div className="flex items-center gap-2">
-                                          <input type="number" min="0" placeholder="Toko" value={item.store_stock_new} onChange={(e) => {
-                                              const newItems = [...batchItems];
-                                              newItems[idx] = { ...newItems[idx], store_stock_new: e.target.value };
-                                              setBatchItems(newItems);
-                                          }} className={`w-full rounded-lg border px-2 py-2 text-center font-bold text-[#2A1712] outline-none ${err ? 'border-red-500 focus:border-red-500 bg-white' : 'border-[#EBCDB8] focus:border-[#C80503]'}`} required />
-                                          <span className="text-[#7A6258]">-</span>
-                                          <input type="number" min="0" placeholder="Gudang" value={item.warehouse_stock_new} onChange={(e) => {
-                                              const newItems = [...batchItems];
-                                              newItems[idx] = { ...newItems[idx], warehouse_stock_new: e.target.value };
-                                              setBatchItems(newItems);
-                                          }} className={`w-full rounded-lg border px-2 py-2 text-center font-bold text-[#2A1712] outline-none ${err ? 'border-red-500 focus:border-red-500 bg-white' : 'border-[#EBCDB8] focus:border-[#C80503]'}`} required />
-                                      </div>
-                                      {err && <span className="text-red-500 text-[10px] font-bold">{err}</span>}
-                                    </div>
-                                 ) : (
-                                    <div className="flex flex-col gap-1">
-                                      <input type="number" min="1" max={(batchType === "batch_mutation_to_store" || batchType === "batch_transfer_branch") ? item.warehouse_stock : undefined} value={item.batchAmount} onChange={(e) => {
-                                          const newItems = [...batchItems];
-                                          newItems[idx] = { ...newItems[idx], batchAmount: e.target.value };
-                                          setBatchItems(newItems);
-                                      }} className={`w-full rounded-lg border px-2 py-2 text-center font-bold text-[#2A1712] outline-none ${err ? 'border-red-500 focus:border-red-500 bg-white' : 'border-[#EBCDB8] focus:border-[#C80503]'}`} required placeholder="0" />
-                                      {err && <span className="text-red-500 text-[10px] font-bold">{err}</span>}
-                                    </div>
-                                 )}
-                               </td>
-                               <td className="px-4 py-2 text-center">
-                                 <button type="button" onClick={() => setBatchItems(batchItems.filter(i => i.id !== item.id))} className="text-red-500 hover:text-red-700 bg-red-50 p-2 rounded-lg">
-                                    <Trash2 className="w-4 h-4" />
-                                 </button>
-                               </td>
-                             </tr>
+                              <tr key={item.id} className={`border-t border-[#EBCDB8] ${err ? 'bg-red-50/30' : ''}`}>
+                                <td className="px-4 py-3 font-bold text-[#2A1712]">
+                                  {item.name}
+                                  {batchType === "correction" && (
+                                      <div className="text-xs font-normal text-[#7A6258] mt-1">Saat ini: {item.stock}</div>
+                                  )}
+                                </td>
+                                {batchType !== "correction" && (
+                                  <td className="px-4 py-3 text-[#2A1712] font-bold">{item.stock}</td>
+                                )}
+                                <td className="px-4 py-2">
+                                  {batchType === "correction" ? (
+                                     <div className="flex flex-col gap-1">
+                                       <input type="number" min="0" placeholder="Stok Fisik Baru" value={item.stock_new} onChange={(e) => {
+                                           const newItems = [...batchItems];
+                                           newItems[idx] = { ...newItems[idx], stock_new: e.target.value };
+                                           setBatchItems(newItems);
+                                       }} className={`w-full rounded-lg border px-2 py-2 text-center font-bold text-[#2A1712] outline-none ${err ? 'border-red-500 focus:border-red-500 bg-white' : 'border-[#EBCDB8] focus:border-[#C80503]'}`} required />
+                                       {err && <span className="text-red-500 text-[10px] font-bold">{err}</span>}
+                                     </div>
+                                  ) : (
+                                     <div className="flex flex-col gap-1">
+                                       <input type="number" min="1" max={batchType === "transfer" ? item.stock : undefined} value={item.batchAmount} onChange={(e) => {
+                                           const newItems = [...batchItems];
+                                           newItems[idx] = { ...newItems[idx], batchAmount: e.target.value };
+                                           setBatchItems(newItems);
+                                       }} className={`w-full rounded-lg border px-2 py-2 text-center font-bold text-[#2A1712] outline-none ${err ? 'border-red-500 focus:border-red-500 bg-white' : 'border-[#EBCDB8] focus:border-[#C80503]'}`} required placeholder="0" />
+                                       {err && <span className="text-red-500 text-[10px] font-bold">{err}</span>}
+                                     </div>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  <button type="button" onClick={() => setBatchItems(batchItems.filter(i => i.id !== item.id))} className="text-red-500 hover:text-red-700 bg-red-50 p-2 rounded-lg">
+                                     <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
                            );
                          })}
                        </tbody>
@@ -390,15 +371,15 @@ function AdminMutasiPage() {
              
              <div className="shrink-0 mb-4">
                <label className="block text-sm font-bold text-[#7A6258] mb-2">
-                 Catatan {batchType === "batch_stock_adjustment" ? "(Wajib)" : "(Opsional)"}
+                  Catatan {batchType === "correction" ? "(Wajib)" : "(Opsional)"}
                </label>
                <input
                  type="text"
                  value={note}
                  onChange={(e) => setNote(e.target.value)}
                  className="w-full rounded-xl border border-[#EBCDB8] bg-white px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20"
-                 placeholder={batchType === "batch_stock_adjustment" ? "Alasan koreksi fisik..." : "Catatan transaksi..."}
-                 required={batchType === "batch_stock_adjustment"}
+                  placeholder={batchType === "correction" ? "Alasan koreksi fisik..." : "Catatan transaksi..."}
+                  required={batchType === "correction"}
                />
              </div>
 

@@ -67,8 +67,9 @@ class ProductController extends Controller
             'code' => ['required', 'string', 'max:50', 'unique:products,code'],
             'name' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:100'],
-            'store_stock' => ['required', 'integer', 'min:0'],
-            'warehouse_stock' => ['required', 'integer', 'min:0'],
+            'stock' => ['nullable', 'integer', 'min:0'],
+            'store_stock' => ['nullable', 'integer', 'min:0'],
+            'warehouse_stock' => ['nullable', 'integer', 'min:0'],
             'price' => ['required', 'integer', 'min:0'],
             'expired_date' => ['nullable', 'date'],
             'storage_location' => ['nullable', 'string', 'max:100'],
@@ -82,8 +83,14 @@ class ProductController extends Controller
         }
 
         $validatedData['status'] = $validatedData['status'] ?? 'Aktif';
-        $validatedData['stock'] = $validatedData['store_stock'] + $validatedData['warehouse_stock'];
-        $validatedData['min_stock'] = 0; 
+
+        if (isset($validatedData['stock'])) {
+            $validatedData['stock'] = (int) $validatedData['stock'];
+        } else {
+            $validatedData['stock'] = (int) ($validatedData['store_stock'] ?? 0) + (int) ($validatedData['warehouse_stock'] ?? 0);
+        }
+
+        $validatedData['min_stock'] = 0;
 
         $product = Product::create($validatedData);
 
@@ -136,8 +143,9 @@ class ProductController extends Controller
             ],
             'name' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:100'],
-            'store_stock' => ['required', 'integer', 'min:0'],
-            'warehouse_stock' => ['required', 'integer', 'min:0'],
+            'stock' => ['nullable', 'integer', 'min:0'],
+            'store_stock' => ['nullable', 'integer', 'min:0'],
+            'warehouse_stock' => ['nullable', 'integer', 'min:0'],
             'price' => ['required', 'integer', 'min:0'],
             'expired_date' => ['nullable', 'date'],
             'storage_location' => ['nullable', 'string', 'max:100'],
@@ -154,23 +162,26 @@ class ProductController extends Controller
         }
 
         $validatedData['status'] = $validatedData['status'] ?? 'Aktif';
-        $validatedData['stock'] = $validatedData['store_stock'] + $validatedData['warehouse_stock'];
 
-        $beforeStoreStock = $product->store_stock;
-        $beforeWarehouseStock = $product->warehouse_stock;
+        if (isset($validatedData['stock'])) {
+            $validatedData['stock'] = (int) $validatedData['stock'];
+        } else {
+            $validatedData['stock'] = (int) ($validatedData['store_stock'] ?? 0) + (int) ($validatedData['warehouse_stock'] ?? 0);
+        }
 
+        $beforeStock = $product->stock;
         $product->update($validatedData);
 
-        if ($beforeStoreStock != $product->store_stock || $beforeWarehouseStock != $product->warehouse_stock) {
+        if ($beforeStock != $product->stock) {
             StockHistory::create([
                 'product_id' => $product->id,
                 'branch_id' => $product->branch_id,
                 'user_id' => $request->user_id,
                 'type' => 'product_updated',
-                'quantity' => ($product->store_stock + $product->warehouse_stock) - ($beforeStoreStock + $beforeWarehouseStock),
-                'before_store_stock' => $beforeStoreStock,
-                'after_store_stock' => $product->store_stock,
-                'before_warehouse_stock' => $beforeWarehouseStock,
+                'quantity' => $product->stock - $beforeStock,
+                'before_store_stock' => $beforeStock,
+                'after_store_stock' => $product->stock,
+                'before_warehouse_stock' => $product->warehouse_stock,
                 'after_warehouse_stock' => $product->warehouse_stock,
                 'note' => 'Update data produk',
             ]);
@@ -215,62 +226,10 @@ class ProductController extends Controller
 
     public function mutateStock(Request $request, $id)
     {
-        $product = Product::find($id);
-
-        if (!$product) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Produk tidak ditemukan.',
-            ], 404);
-        }
-
-        if ($request->filled('branch_id') && $product->branch_id != $request->branch_id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Anda tidak memiliki akses untuk memutasi stok cabang lain.',
-            ], 403);
-        }
-
-        $validatedData = $request->validate([
-            'amount' => ['required', 'integer', 'min:1'],
-        ]);
-
-        $amount = $validatedData['amount'];
-
-        if ($product->warehouse_stock < $amount) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Stok gudang tidak mencukupi untuk mutasi sejumlah ' . $amount,
-            ], 422);
-        }
-
-        $beforeStoreStock = $product->store_stock;
-        $beforeWarehouseStock = $product->warehouse_stock;
-
-        $product->warehouse_stock -= $amount;
-        $product->store_stock += $amount;
-        $product->stock = $product->store_stock + $product->warehouse_stock;
-        
-        $product->save();
-
-        StockHistory::create([
-            'product_id' => $product->id,
-            'branch_id' => $product->branch_id,
-            'user_id' => $request->user_id,
-            'type' => 'mutation_to_store',
-            'quantity' => $amount,
-            'before_store_stock' => $beforeStoreStock,
-            'after_store_stock' => $product->store_stock,
-            'before_warehouse_stock' => $beforeWarehouseStock,
-            'after_warehouse_stock' => $product->warehouse_stock,
-            'note' => 'Mutasi dari gudang ke toko',
-        ]);
-
         return response()->json([
-            'success' => true,
-            'message' => "Mutasi stok sebesar {$amount} berhasil dipindahkan ke toko.",
-            'data' => $product,
-        ]);
+            'success' => false,
+            'message' => 'Mutasi ke toko sudah tidak digunakan karena stok gudang dan toko sudah digabung menjadi stok cabang.',
+        ], 422);
     }
 
     public function restockWarehouse(Request $request, $id)
@@ -296,29 +255,27 @@ class ProductController extends Controller
         ]);
 
         $amount = $validatedData['amount'];
-        $beforeStoreStock = $product->store_stock;
-        $beforeWarehouseStock = $product->warehouse_stock;
+        $beforeStock = $product->stock;
 
-        $product->warehouse_stock += $amount;
-        $product->stock = $product->store_stock + $product->warehouse_stock;
+        $product->stock += $amount;
         $product->save();
 
         StockHistory::create([
             'product_id' => $product->id,
             'branch_id' => $product->branch_id,
             'user_id' => $request->user_id,
-            'type' => 'restock_warehouse',
+            'type' => 'restock',
             'quantity' => $amount,
-            'before_store_stock' => $beforeStoreStock,
-            'after_store_stock' => $product->store_stock,
-            'before_warehouse_stock' => $beforeWarehouseStock,
+            'before_store_stock' => $beforeStock,
+            'after_store_stock' => $product->stock,
+            'before_warehouse_stock' => $product->warehouse_stock,
             'after_warehouse_stock' => $product->warehouse_stock,
-            'note' => 'Restock stok gudang',
+            'note' => 'Restock stok',
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => "Restock sebesar {$amount} berhasil ditambahkan ke gudang.",
+            'message' => "Restock sebesar {$amount} berhasil ditambahkan.",
             'data' => $product,
         ]);
     }
@@ -342,25 +299,19 @@ class ProductController extends Controller
         }
 
         $validatedData = $request->validate([
-            'store_stock' => ['required', 'integer', 'min:0'],
-            'warehouse_stock' => ['required', 'integer', 'min:0'],
+            'stock' => ['required', 'integer', 'min:0'],
             'note' => ['nullable', 'string', 'max:255'],
             'user_id' => ['required']
         ]);
 
-        $beforeStoreStock = $product->store_stock;
-        $beforeWarehouseStock = $product->warehouse_stock;
-        
-        $newStoreStock = $validatedData['store_stock'];
-        $newWarehouseStock = $validatedData['warehouse_stock'];
+        $beforeStock = $product->stock;
+        $newStock = $validatedData['stock'];
 
-        if ($beforeStoreStock != $newStoreStock || $beforeWarehouseStock != $newWarehouseStock) {
-            $product->store_stock = $newStoreStock;
-            $product->warehouse_stock = $newWarehouseStock;
-            $product->stock = $newStoreStock + $newWarehouseStock;
+        if ($beforeStock != $newStock) {
+            $product->stock = $newStock;
             $product->save();
-            
-            $quantityDiff = ($newStoreStock + $newWarehouseStock) - ($beforeStoreStock + $beforeWarehouseStock);
+
+            $quantityDiff = $newStock - $beforeStock;
 
             StockHistory::create([
                 'product_id' => $product->id,
@@ -368,10 +319,10 @@ class ProductController extends Controller
                 'user_id' => $validatedData['user_id'],
                 'type' => 'stock_adjustment',
                 'quantity' => $quantityDiff,
-                'before_store_stock' => $beforeStoreStock,
-                'after_store_stock' => $newStoreStock,
-                'before_warehouse_stock' => $beforeWarehouseStock,
-                'after_warehouse_stock' => $newWarehouseStock,
+                'before_store_stock' => $beforeStock,
+                'after_store_stock' => $newStock,
+                'before_warehouse_stock' => $product->warehouse_stock,
+                'after_warehouse_stock' => $product->warehouse_stock,
                 'note' => $validatedData['note'] ?? 'Koreksi Stok Fisik',
             ]);
         }
@@ -417,10 +368,10 @@ class ProductController extends Controller
 
         $amount = $validatedData['amount'];
 
-        if ($product->warehouse_stock < $amount) {
+        if ($product->stock < $amount) {
             return response()->json([
                 'success' => false,
-                'message' => 'Stok gudang tidak mencukupi untuk transfer sejumlah ' . $amount,
+                'message' => 'Stok tidak mencukupi untuk transfer sejumlah ' . $amount,
             ], 422);
         }
 
@@ -436,43 +387,37 @@ class ProductController extends Controller
             ], 422);
         }
 
-        $sourceBeforeWarehouseStock = $product->warehouse_stock;
-        $targetBeforeWarehouseStock = $targetProduct->warehouse_stock;
+        $sourceBeforeStock = $product->stock;
+        $targetBeforeStock = $targetProduct->stock;
 
-        // Update Source Product
-        $product->warehouse_stock -= $amount;
-        $product->stock = $product->store_stock + $product->warehouse_stock;
+        $product->stock -= $amount;
         $product->save();
 
-        // Update Target Product
-        $targetProduct->warehouse_stock += $amount;
-        $targetProduct->stock = $targetProduct->store_stock + $targetProduct->warehouse_stock;
+        $targetProduct->stock += $amount;
         $targetProduct->save();
 
-        // Record History for Source
         StockHistory::create([
             'product_id' => $product->id,
             'branch_id' => $product->branch_id,
             'user_id' => $validatedData['user_id'],
             'type' => 'transfer_out',
             'quantity' => $amount,
-            'before_store_stock' => $product->store_stock,
-            'after_store_stock' => $product->store_stock,
-            'before_warehouse_stock' => $sourceBeforeWarehouseStock,
+            'before_store_stock' => $sourceBeforeStock,
+            'after_store_stock' => $product->stock,
+            'before_warehouse_stock' => $product->warehouse_stock,
             'after_warehouse_stock' => $product->warehouse_stock,
             'note' => $validatedData['note'] ?? 'Transfer keluar ke cabang tujuan',
         ]);
 
-        // Record History for Target
         StockHistory::create([
             'product_id' => $targetProduct->id,
             'branch_id' => $targetProduct->branch_id,
             'user_id' => $validatedData['user_id'],
             'type' => 'transfer_in',
             'quantity' => $amount,
-            'before_store_stock' => $targetProduct->store_stock,
-            'after_store_stock' => $targetProduct->store_stock,
-            'before_warehouse_stock' => $targetBeforeWarehouseStock,
+            'before_store_stock' => $targetBeforeStock,
+            'after_store_stock' => $targetProduct->stock,
+            'before_warehouse_stock' => $targetProduct->warehouse_stock,
             'after_warehouse_stock' => $targetProduct->warehouse_stock,
             'note' => $validatedData['note'] ?? 'Transfer masuk dari cabang asal',
         ]);
@@ -495,8 +440,7 @@ class ProductController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'exists:products,id'],
             'items.*.amount' => ['required_if:action,batch_restock,batch_mutation_to_store,batch_transfer_branch', 'integer', 'min:1'],
-            'items.*.store_stock' => ['required_if:action,batch_stock_adjustment', 'integer', 'min:0'],
-            'items.*.warehouse_stock' => ['required_if:action,batch_stock_adjustment', 'integer', 'min:0'],
+            'items.*.stock' => ['required_if:action,batch_stock_adjustment', 'integer', 'min:0'],
         ]);
 
         $branchId = $validatedData['branch_id'];
@@ -506,23 +450,11 @@ class ProductController extends Controller
         $targetBranchId = $validatedData['target_branch_id'] ?? null;
         $note = $validatedData['note'] ?? null;
 
-        \Illuminate\Support\Facades\Log::info("BATCH STOCK VALIDATED DATA: ", $validatedData);
-        \Illuminate\Support\Facades\Log::info("BATCH STOCK RAW REQUEST: ", $request->all());
-
-        // Manual validation for items based on action
-        foreach ($items as $idx => $item) {
-            if ($action === 'batch_stock_adjustment') {
-                if (!isset($item['store_stock']) || !is_numeric($item['store_stock']) || $item['store_stock'] < 0) {
-                    return response()->json(['success' => false, 'message' => "Stok toko fisik tidak valid pada salah satu item."], 422);
-                }
-                if (!isset($item['warehouse_stock']) || !is_numeric($item['warehouse_stock']) || $item['warehouse_stock'] < 0) {
-                    return response()->json(['success' => false, 'message' => "Stok gudang fisik tidak valid pada salah satu item."], 422);
-                }
-            } else {
-                if (!isset($item['amount']) || !is_numeric($item['amount']) || $item['amount'] < 1) {
-                    return response()->json(['success' => false, 'message' => "Jumlah (amount) tidak valid pada salah satu item."], 422);
-                }
-            }
+        if ($action === 'batch_mutation_to_store') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mutasi ke toko sudah tidak digunakan karena stok gudang dan toko sudah digabung menjadi stok cabang.',
+            ], 422);
         }
 
         \Illuminate\Support\Facades\DB::beginTransaction();
@@ -539,16 +471,11 @@ class ProductController extends Controller
                     throw new \Exception("Anda tidak memiliki akses untuk memproses produk '{$product->name}'.");
                 }
 
-                $beforeStoreStock = $product->store_stock;
-                $beforeWarehouseStock = $product->warehouse_stock;
+                $beforeStock = $product->stock;
 
                 if ($action === 'batch_stock_adjustment') {
-                    $newStoreStock = $item['store_stock'];
-                    $newWarehouseStock = $item['warehouse_stock'];
-
-                    $product->store_stock = $newStoreStock;
-                    $product->warehouse_stock = $newWarehouseStock;
-                    $product->stock = $newStoreStock + $newWarehouseStock;
+                    $newStock = (int) $item['stock'];
+                    $product->stock = $newStock;
                     $product->save();
 
                     StockHistory::create([
@@ -556,42 +483,19 @@ class ProductController extends Controller
                         'branch_id' => $product->branch_id,
                         'user_id' => $userId,
                         'type' => 'stock_adjustment',
-                        'quantity' => 0,
-                        'before_store_stock' => $beforeStoreStock,
-                        'after_store_stock' => $product->store_stock,
-                        'before_warehouse_stock' => $beforeWarehouseStock,
+                        'quantity' => $newStock - $beforeStock,
+                        'before_store_stock' => $beforeStock,
+                        'after_store_stock' => $product->stock,
+                        'before_warehouse_stock' => $product->warehouse_stock,
                         'after_warehouse_stock' => $product->warehouse_stock,
                         'note' => $note ?? 'Batch Koreksi Stok',
                     ]);
 
-                } elseif ($action === 'batch_mutation_to_store') {
-                    $amount = $item['amount'];
-                    if ($product->warehouse_stock < $amount) {
-                        throw new \Exception("Stok gudang '{$product->name}' tidak mencukupi untuk ditransfer. Tersedia: {$product->warehouse_stock}, Diminta: {$amount}");
-                    }
-
-                    $product->warehouse_stock -= $amount;
-                    $product->store_stock += $amount;
-                    $product->stock = $product->store_stock + $product->warehouse_stock;
-                    $product->save();
-
-                    StockHistory::create([
-                        'product_id' => $product->id,
-                        'branch_id' => $product->branch_id,
-                        'user_id' => $userId,
-                        'type' => 'mutation_to_store',
-                        'quantity' => $amount,
-                        'before_store_stock' => $beforeStoreStock,
-                        'after_store_stock' => $product->store_stock,
-                        'before_warehouse_stock' => $beforeWarehouseStock,
-                        'after_warehouse_stock' => $product->warehouse_stock,
-                        'note' => $note ?? 'Batch Mutasi Gudang ke Toko',
-                    ]);
-
                 } elseif ($action === 'batch_transfer_branch') {
-                    $amount = $item['amount'];
-                    if ($product->warehouse_stock < $amount) {
-                        throw new \Exception("Stok gudang '{$product->name}' tidak mencukupi untuk ditransfer. Tersedia: {$product->warehouse_stock}, Diminta: {$amount}");
+                    $amount = (int) $item['amount'];
+
+                    if ($product->stock < $amount) {
+                        throw new \Exception("Stok '{$product->name}' tidak mencukupi untuk ditransfer. Tersedia: {$product->stock}, Diminta: {$amount}");
                     }
 
                     $targetProduct = Product::where('name', $product->name)
@@ -603,16 +507,12 @@ class ProductController extends Controller
                         throw new \Exception("Produk '{$product->name}' belum tersedia di cabang tujuan.");
                     }
 
-                    $targetBeforeWarehouseStock = $targetProduct->warehouse_stock;
+                    $targetBeforeStock = $targetProduct->stock;
 
-                    // Source
-                    $product->warehouse_stock -= $amount;
-                    $product->stock = $product->store_stock + $product->warehouse_stock;
+                    $product->stock -= $amount;
                     $product->save();
 
-                    // Target
-                    $targetProduct->warehouse_stock += $amount;
-                    $targetProduct->stock = $targetProduct->store_stock + $targetProduct->warehouse_stock;
+                    $targetProduct->stock += $amount;
                     $targetProduct->save();
 
                     StockHistory::create([
@@ -621,9 +521,9 @@ class ProductController extends Controller
                         'user_id' => $userId,
                         'type' => 'transfer_out',
                         'quantity' => $amount,
-                        'before_store_stock' => $product->store_stock,
-                        'after_store_stock' => $product->store_stock,
-                        'before_warehouse_stock' => $beforeWarehouseStock,
+                        'before_store_stock' => $beforeStock,
+                        'after_store_stock' => $product->stock,
+                        'before_warehouse_stock' => $product->warehouse_stock,
                         'after_warehouse_stock' => $product->warehouse_stock,
                         'note' => $note ?? 'Batch Transfer Keluar',
                     ]);
@@ -634,30 +534,29 @@ class ProductController extends Controller
                         'user_id' => $userId,
                         'type' => 'transfer_in',
                         'quantity' => $amount,
-                        'before_store_stock' => $targetProduct->store_stock,
-                        'after_store_stock' => $targetProduct->store_stock,
-                        'before_warehouse_stock' => $targetBeforeWarehouseStock,
+                        'before_store_stock' => $targetBeforeStock,
+                        'after_store_stock' => $targetProduct->stock,
+                        'before_warehouse_stock' => $targetProduct->warehouse_stock,
                         'after_warehouse_stock' => $targetProduct->warehouse_stock,
-                        'note' => clone $note ? ($note . " (dari cabang asal)") : 'Batch Transfer Masuk',
+                        'note' => $note ? ($note . " (dari cabang asal)") : 'Batch Transfer Masuk',
                     ]);
 
                 } elseif ($action === 'batch_restock') {
-                    $amount = $item['amount'];
-                    $product->warehouse_stock += $amount;
-                    $product->stock = $product->store_stock + $product->warehouse_stock;
+                    $amount = (int) $item['amount'];
+                    $product->stock += $amount;
                     $product->save();
 
                     StockHistory::create([
                         'product_id' => $product->id,
                         'branch_id' => $product->branch_id,
                         'user_id' => $userId,
-                        'type' => 'restock_warehouse',
+                        'type' => 'restock',
                         'quantity' => $amount,
-                        'before_store_stock' => $beforeStoreStock,
-                        'after_store_stock' => $product->store_stock,
-                        'before_warehouse_stock' => $beforeWarehouseStock,
+                        'before_store_stock' => $beforeStock,
+                        'after_store_stock' => $product->stock,
+                        'before_warehouse_stock' => $product->warehouse_stock,
                         'after_warehouse_stock' => $product->warehouse_stock,
-                        'note' => $note ?? 'Batch Restock Gudang',
+                        'note' => $note ?? 'Batch Restok Stok',
                     ]);
                 }
             }

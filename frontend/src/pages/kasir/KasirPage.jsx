@@ -64,8 +64,7 @@ function normalizeProduct(product) {
     code: product.code || "-",
     name: product.name || "-",
     category: product.category || "Lainnya",
-    storeStock: Number(product.store_stock || 0),
-    warehouseStock: Number(product.warehouse_stock || 0),
+    stock: Number(product.stock ?? 0),
     price: Number(product.price || 0),
     expiredDate: product.expired_date || null,
     storageLocation: product.storage_location || "-",
@@ -105,9 +104,9 @@ function ProductImage({ product }) {
 }
 
 function ProductCard({ product, cartQuantity, onAdd }) {
-  const remainingStock = product.storeStock - cartQuantity;
+  const remainingStock = product.stock - cartQuantity;
   const isInactive = String(product.status).toLowerCase() !== "aktif";
-  const isOutOfStock = product.storeStock <= 0;
+  const isOutOfStock = product.stock <= 0;
   const isLowStock = remainingStock > 0 && remainingStock <= 5;
   const cannotAdd = isInactive || isOutOfStock || remainingStock <= 0;
 
@@ -203,7 +202,7 @@ function CartItem({ item, onIncrease, onDecrease, onRemove }) {
           <button
             type="button"
             onClick={() => onIncrease(item.id)}
-            disabled={item.quantity >= item.storeStock}
+            disabled={item.quantity >= item.stock}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-[#7A6258] hover:bg-[#FFF6EA] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="h-4 w-4" />
@@ -497,8 +496,8 @@ function KasirPage() {
     // Sort: Stok tersedia di atas, stok habis di bawah.
     // Jika sama-sama ada/habis, urutkan berdasarkan nama.
     return filtered.sort((a, b) => {
-      const aOutOfStock = a.storeStock <= 0;
-      const bOutOfStock = b.storeStock <= 0;
+      const aOutOfStock = a.stock <= 0;
+      const bOutOfStock = b.stock <= 0;
 
       if (aOutOfStock && !bOutOfStock) return 1;
       if (!aOutOfStock && bOutOfStock) return -1;
@@ -520,13 +519,13 @@ function KasirPage() {
   };
 
   const handleAddToCart = (product) => {
-    if (product.storeStock <= 0) return;
+    if (product.stock <= 0) return;
 
     setCart((currentCart) => {
       const existingItem = currentCart.find((item) => item.id === product.id);
 
       if (existingItem) {
-        if (existingItem.quantity >= product.storeStock) return currentCart;
+        if (existingItem.quantity >= product.stock) return currentCart;
 
         return currentCart.map((item) =>
           item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
@@ -540,7 +539,7 @@ function KasirPage() {
   const handleIncreaseQuantity = (productId) => {
     setCart((currentCart) =>
       currentCart.map((item) =>
-        item.id === productId && item.quantity < item.storeStock
+        item.id === productId && item.quantity < item.stock
           ? { ...item, quantity: item.quantity + 1 }
           : item
       )
@@ -608,7 +607,7 @@ function KasirPage() {
           if (!soldItem) return product;
           return {
             ...product,
-            storeStock: Math.max(product.storeStock - soldItem.quantity, 0),
+            stock: Math.max(product.stock - soldItem.quantity, 0),
           };
         })
       );
@@ -641,7 +640,7 @@ function KasirPage() {
               <div>
                 <h1 className="text-xl font-bold text-[#2A1712]">Produk Toko</h1>
                 <p className="mt-1 text-xs font-semibold text-[#7A6258]">
-                  Hanya menampilkan stok toko dari cabang Anda.
+                  Hanya menampilkan stok dari cabang Anda.
                 </p>
               </div>
 

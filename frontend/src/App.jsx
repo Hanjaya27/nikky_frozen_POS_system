@@ -50,7 +50,9 @@ function getCurrentUser() {
 }
 
 function getPermissions() {
-  const savedPermissions = localStorage.getItem("nikky_permissions");
+  const savedPermissions = localStorage.getItem("nikky_user_permissions_kasir") ||
+    localStorage.getItem("nikky_permissions") ||
+    localStorage.getItem("nikky_kasir_permissions");
 
   if (!savedPermissions) {
     return defaultPermissions;
@@ -59,7 +61,9 @@ function getPermissions() {
   try {
     return JSON.parse(savedPermissions);
   } catch (error) {
+    localStorage.removeItem("nikky_user_permissions_kasir");
     localStorage.removeItem("nikky_permissions");
+    localStorage.removeItem("nikky_kasir_permissions");
     return defaultPermissions;
   }
 }

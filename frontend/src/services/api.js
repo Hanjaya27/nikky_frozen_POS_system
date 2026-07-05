@@ -27,7 +27,7 @@ function buildQueryParams(params = {}) {
   const queryParams = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
+    if (value !== undefined && value !== null && value !== "" && value !== "all") {
       queryParams.append(key, value);
     }
   });
@@ -473,11 +473,29 @@ export async function getLoginActivities(params = {}) {
   return result.data;
 }
 
+export async function getOwnerLoginActivities(params = {}) {
+  const queryString = buildQueryParams(params);
+
+  const url = queryString
+    ? `${API_BASE_URL}/owner/login-activities?${queryString}`
+    : `${API_BASE_URL}/owner/login-activities`;
+
+  const result = await request(
+    url,
+    {
+      method: "GET",
+    },
+    "Gagal mengambil data aktivitas login owner."
+  );
+
+  return result.data;
+}
+
 export async function forceLogoutActivity(id) {
   const result = await request(
-    `${API_BASE_URL}/login-activities/${id}/force-logout`,
+    `${API_BASE_URL}/owner/login-activities/${id}/force-logout`,
     {
-      method: "PUT",
+      method: "POST",
     },
     "Gagal melakukan force logout."
   );
@@ -487,7 +505,7 @@ export async function forceLogoutActivity(id) {
 
 export async function deleteLoginActivity(id) {
   const result = await request(
-    `${API_BASE_URL}/login-activities/${id}`,
+    `${API_BASE_URL}/owner/login-activities/${id}`,
     {
       method: "DELETE",
     },
@@ -573,26 +591,23 @@ export async function deleteUser(id) {
    PERMISSIONS API
 ========================= */
 
-export async function getPermissionsApi() {
-  const result = await request(
-    `${API_BASE_URL}/permissions`,
-    {
-      method: "GET",
-    },
-    "Gagal mengambil data permission."
-  );
+export async function getOwnerRolePermissions(params = {}) {
+  const queryString = buildQueryParams(params);
+  const url = queryString
+    ? `${API_BASE_URL}/owner/role-permissions?${queryString}`
+    : `${API_BASE_URL}/owner/role-permissions`;
+
+  const result = await request(url, { method: "GET" }, "Gagal mengambil data permission.");
 
   return result.data;
 }
 
-export async function updatePermissionsApi(permissions) {
+export async function updateRolePermission(permissionId, payload) {
   const result = await request(
-    `${API_BASE_URL}/permissions`,
+    `${API_BASE_URL}/owner/role-permissions/${permissionId}`,
     {
-      method: "PUT",
-      body: JSON.stringify({
-        permissions,
-      }),
+      method: "PATCH",
+      body: JSON.stringify(payload),
     },
     "Gagal memperbarui permission."
   );
@@ -600,31 +615,34 @@ export async function updatePermissionsApi(permissions) {
   return result.data;
 }
 
+export async function enableAllAdminPermissions() {
+  const result = await request(`${API_BASE_URL}/owner/role-permissions/enable-all-admin`, { method: "POST" }, "Gagal mengaktifkan permission admin.");
+  return result.data;
+}
+
+export async function enableAllCashierPermissions() {
+  const result = await request(`${API_BASE_URL}/owner/role-permissions/enable-all-cashier`, { method: "POST" }, "Gagal mengaktifkan permission kasir.");
+  return result.data;
+}
+
+export async function applySafeDefaultPermissions() {
+  const result = await request(`${API_BASE_URL}/owner/role-permissions/safe-defaults`, { method: "POST" }, "Gagal menerapkan standar aman.");
+  return result.data;
+}
+
+export async function resetRolePermissions() {
+  const result = await request(`${API_BASE_URL}/owner/role-permissions/reset`, { method: "POST" }, "Gagal reset permission.");
+  return result.data;
+}
+
+export const getPermissionsApi = getOwnerRolePermissions;
+export const resetPermissionsApi = resetRolePermissions;
 export async function updateSinglePermissionApi(permissionId, kasirAccess) {
-  const result = await request(
-    `${API_BASE_URL}/permissions/${permissionId}`,
-    {
-      method: "PUT",
-      body: JSON.stringify({
-        kasir_access: kasirAccess,
-      }),
-    },
-    "Gagal memperbarui permission."
-  );
-
-  return result.data;
+  return updateRolePermission(permissionId, { role: "cashier", allowed: kasirAccess });
 }
-
-export async function resetPermissionsApi() {
-  const result = await request(
-    `${API_BASE_URL}/permissions/reset`,
-    {
-      method: "POST",
-    },
-    "Gagal reset permission."
-  );
-
-  return result.data;
+export async function updatePermissionsApi(permissions) {
+  await Promise.all(permissions.map((permission) => updateSinglePermissionApi(permission.permission_id, permission.kasir_access)));
+  return getOwnerRolePermissions();
 }
 
 /* =========================
@@ -668,6 +686,90 @@ export async function resetSettingsApi() {
   return result.data;
 }
 
+export async function getOwnerSettings() {
+  const result = await request(
+    `${API_BASE_URL}/owner/settings`,
+    { method: "GET" },
+    "Gagal mengambil pengaturan owner."
+  );
+
+  return result.data;
+}
+
+export async function updateOwnerSettings(payload) {
+  const result = await request(
+    `${API_BASE_URL}/owner/settings`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+    "Gagal menyimpan pengaturan owner."
+  );
+
+  return result.data;
+}
+
+const api = {
+  getProducts,
+  getProductById,
+  createProduct,
+  updateProduct,
+  mutateProductStock,
+  restockProduct,
+  adjustProductStock,
+  transferProductStock,
+  batchProcessStock,
+  deleteProduct,
+  getStockHistories,
+  checkoutTransaction,
+  getTransactions,
+  getExpenses,
+  getExpenseById,
+  createExpense,
+  updateExpense,
+  deleteExpense,
+  getShifts,
+  getCurrentShift,
+  openShift,
+  closeShift,
+  updateShift,
+  deleteShift,
+  loginUser,
+  logoutUser,
+  getLoginActivities,
+  getOwnerLoginActivities,
+  forceLogoutActivity,
+  deleteLoginActivity,
+  getUsers,
+  getUserById,
+  createUser,
+  updateUser,
+  deleteUser,
+  getOwnerRolePermissions,
+  updateRolePermission,
+  enableAllAdminPermissions,
+  enableAllCashierPermissions,
+  applySafeDefaultPermissions,
+  resetRolePermissions,
+  getPermissionsApi,
+  resetPermissionsApi,
+  updateSinglePermissionApi,
+  updatePermissionsApi,
+  getSettingsApi,
+  updateSettingsApi,
+  resetSettingsApi,
+  getOwnerSettings,
+  updateOwnerSettings,
+  getBranches,
+  getOwnerUsers,
+  getOwnerDashboard,
+  getOwnerReports,
+  getOwnerStocks,
+  getOwnerExpenses,
+};
+
+export default api;
+
 /* =========================
    HELPER
 ========================= */
@@ -685,6 +787,99 @@ export async function getBranches() {
     `${API_BASE_URL}/branches`,
     { method: "GET" },
     "Gagal mengambil data cabang."
+  );
+
+  return result.data;
+}
+
+export async function getAdminDashboard(params = {}) {
+  const queryString = buildQueryParams(params);
+  const url = queryString
+    ? `${API_BASE_URL}/admin/dashboard?${queryString}`
+    : `${API_BASE_URL}/admin/dashboard`;
+
+  const result = await request(
+    url,
+    { method: "GET" },
+    "Gagal mengambil data dashboard admin."
+  );
+
+  return result.data;
+}
+export async function getOwnerUsers(params = {}) {
+  const queryString = buildQueryParams(params);
+  const url = queryString
+    ? `${API_BASE_URL}/owner/users?${queryString}`
+    : `${API_BASE_URL}/owner/users`;
+
+  const result = await request(
+    url,
+    { method: "GET" },
+    "Gagal mengambil data user."
+  );
+
+  return result.data;
+}
+
+/* =========================
+   OWNER DASHBOARD API
+========================= */
+
+export async function getOwnerDashboard(params = {}) {
+  const queryString = buildQueryParams(params);
+  const url = queryString
+    ? `${API_BASE_URL}/owner/dashboard?${queryString}`
+    : `${API_BASE_URL}/owner/dashboard`;
+
+  const result = await request(
+    url,
+    { method: "GET" },
+    "Gagal mengambil data dashboard owner."
+  );
+
+  return result.data;
+}
+
+export async function getOwnerReports(params = {}) {
+  const queryString = buildQueryParams(params);
+  const url = queryString
+    ? `${API_BASE_URL}/owner/reports?${queryString}`
+    : `${API_BASE_URL}/owner/reports`;
+
+  const result = await request(
+    url,
+    { method: "GET" },
+    "Gagal mengambil data laporan owner."
+  );
+
+  return result.data;
+}
+
+export async function getOwnerStocks(params = {}) {
+  const queryString = buildQueryParams(params);
+  const url = queryString
+    ? `${API_BASE_URL}/owner/stocks?${queryString}`
+    : `${API_BASE_URL}/owner/stocks`;
+
+  const result = await request(
+    url,
+    { method: "GET" },
+    "Gagal mengambil data barang dan stok owner."
+  );
+
+  return result.data;
+}
+
+export async function getOwnerExpenses(params = {}) {
+  const queryString = buildQueryParams(params);
+  const url = queryString
+    ? `${API_BASE_URL}/owner/expenses?${queryString}`
+    : `${API_BASE_URL}/owner/expenses`;
+
+  const result = await request(
+    url,
+    { method: "GET" },
+    "Gagal mengambil data pengeluaran owner."
   );
 
   return result.data;

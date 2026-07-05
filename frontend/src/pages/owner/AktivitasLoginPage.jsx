@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  deleteLoginActivity,
+  getOwnerLoginActivities,
   forceLogoutActivity,
-  getLoginActivities,
+  deleteLoginActivity,
 } from "../../services/api";
 
 const branches = ["Semua", "Cabang 1", "Cabang 2", "Semua Cabang"];
 const shifts = ["Semua", "Shift Pagi", "Shift Sore", "Monitoring Owner"];
 const statuses = ["Semua", "Login", "Logout"];
-const roles = ["Semua", "owner", "kasir"];
+const roles = ["Semua", "owner", "admin", "cashier"];
 
 function formatDateTime(dateString) {
   if (!dateString) return "-";
@@ -36,8 +36,8 @@ function getBranchIdByName(branchName) {
 
 function formatRoleLabel(role) {
   if (role === "owner") return "Owner";
-  if (role === "kasir") return "Kasir";
-
+  if (role === "admin") return "Admin";
+  if (role === "cashier" || role === "kasir") return "Kasir";
   return role || "-";
 }
 
@@ -47,31 +47,26 @@ function normalizeActivity(activity) {
     user_id: activity.user_id,
     branch_id: activity.branch_id,
 
-    name: activity.name || activity.user?.name || "-",
-    username: activity.username || activity.user?.username || "-",
-    role: activity.role || activity.user?.role || "-",
+    name: activity.user_name || activity.name || "-",
+    username: activity.username || "-",
+    role: activity.role || "-",
 
-    branch:
-      activity.branch_name ||
-      activity.branch?.name ||
-      (activity.role === "owner" ? "Semua Cabang" : "-"),
-
-    shift: activity.shift_name || "-",
+    branch: activity.branch_name || "-",
+    shift: activity.shift || activity.shift_name || "-",
 
     loginTime: activity.login_at,
     logoutTime: activity.logout_at,
 
-    status: activity.status || "Login",
+    status: activity.status === "login" ? "Login" : "Logout",
     device: activity.device || "-",
     ipAddress: activity.ip_address || "-",
-    userAgent: activity.user_agent || "-",
     note: activity.note || "-",
   };
 }
 
 function AktivitasLoginPage() {
   const [activities, setActivities] = useState([]);
-
+  const [summary, setSummary] = useState({});
   const [searchKeyword, setSearchKeyword] = useState("");
   const [selectedBranch, setSelectedBranch] = useState("Semua");
   const [selectedShift, setSelectedShift] = useState("Semua");
@@ -99,11 +94,11 @@ function AktivitasLoginPage() {
       }
 
       if (selectedStatus !== "Semua") {
-        params.status = selectedStatus;
+        params.status = selectedStatus.toLowerCase();
       }
 
       if (selectedShift !== "Semua") {
-        params.shift_name = selectedShift;
+        params.shift = selectedShift;
       }
 
       if (selectedDate) {
@@ -114,14 +109,17 @@ function AktivitasLoginPage() {
         params.search = searchKeyword.trim();
       }
 
-      const activityData = await getLoginActivities(params);
+      const response = await getOwnerLoginActivities(params);
+      const activityData = response.activities || [];
+      const summaryData = response.summary || {};
+
       const normalizedActivities = activityData.map(normalizeActivity);
 
       setActivities(normalizedActivities);
+      setSummary(summaryData);
     } catch (error) {
       setErrorMessage(
-        error.message ||
-          "Gagal mengambil data aktivitas login dari backend. Pastikan Laravel server berjalan."
+        error.message || "Gagal mengambil data aktivitas login dari backend."
       );
     } finally {
       setIsLoading(false);
@@ -130,75 +128,26 @@ function AktivitasLoginPage() {
 
   useEffect(() => {
     fetchActivities();
-  }, [selectedBranch, selectedRole, selectedStatus, selectedShift, selectedDate]);
-
-  const filteredActivities = useMemo(() => {
-    return activities.filter((activity) => {
-      const keyword = searchKeyword.toLowerCase();
-
-      const matchSearch =
-        activity.name?.toLowerCase().includes(keyword) ||
-        activity.username?.toLowerCase().includes(keyword) ||
-        activity.branch?.toLowerCase().includes(keyword) ||
-        activity.shift?.toLowerCase().includes(keyword) ||
-        activity.device?.toLowerCase().includes(keyword);
-
-      return matchSearch;
-    });
-  }, [activities, searchKeyword]);
-
-  const totalActivity = activities.length;
-
-  const activeLogin = activities.filter(
-    (activity) => activity.status === "Login"
-  ).length;
-
-  const logoutActivity = activities.filter(
-    (activity) => activity.status === "Logout"
-  ).length;
-
-  const ownerActivity = activities.filter(
-    (activity) => activity.role === "owner"
-  ).length;
-
-  const cashierActivity = activities.filter(
-    (activity) => activity.role === "kasir"
-  ).length;
-
-  const branchOneActivity = activities.filter(
-    (activity) => activity.branch === "Cabang 1"
-  ).length;
-
-  const branchTwoActivity = activities.filter(
-    (activity) => activity.branch === "Cabang 2"
-  ).length;
+  }, [selectedBranch, selectedRole, selectedStatus, selectedShift, selectedDate, searchKeyword]);
 
   const showSuccess = (message) => {
     setSuccessMessage(message);
-
-    setTimeout(() => {
-      setSuccessMessage("");
-    }, 2500);
+    setTimeout(() => setSuccessMessage(""), 2500);
   };
 
   const handleRefresh = async () => {
     await fetchActivities();
-    showSuccess("Data aktivitas login berhasil diperbarui dari backend.");
+    showSuccess("Data aktivitas login berhasil diperbarui.");
   };
 
   const handleForceLogout = async (activity) => {
-    const confirmLogout = confirm(
-      `Yakin ingin force logout user ${activity.username}?`
-    );
-
+    const confirmLogout = confirm(`Yakin ingin force logout user ${activity.username}?`);
     if (!confirmLogout) return;
 
     try {
       setErrorMessage("");
-
       await forceLogoutActivity(activity.id);
       await fetchActivities();
-
       showSuccess("Status login berhasil diubah menjadi logout.");
     } catch (error) {
       alert(error.message || "Gagal melakukan force logout.");
@@ -206,45 +155,27 @@ function AktivitasLoginPage() {
   };
 
   const handleDelete = async (activity) => {
-    const confirmDelete = confirm(
-      `Yakin ingin menghapus aktivitas login ${activity.username}?`
-    );
-
+    const confirmDelete = confirm(`Yakin ingin menghapus aktivitas login ${activity.username}?`);
     if (!confirmDelete) return;
 
     try {
       setErrorMessage("");
-
       await deleteLoginActivity(activity.id);
       await fetchActivities();
-
-      showSuccess("Data aktivitas login berhasil dihapus dari backend.");
+      showSuccess("Data aktivitas login berhasil dihapus.");
     } catch (error) {
       alert(error.message || "Gagal menghapus aktivitas login.");
     }
   };
 
   const exportCSV = () => {
-    if (filteredActivities.length === 0) {
+    if (activities.length === 0) {
       alert("Tidak ada data aktivitas login untuk diexport.");
       return;
     }
 
-    const headers = [
-      "Nama",
-      "Username",
-      "Role",
-      "Cabang",
-      "Shift",
-      "Waktu Login",
-      "Waktu Logout",
-      "Status",
-      "Device",
-      "IP Address",
-      "Catatan",
-    ];
-
-    const rows = filteredActivities.map((activity) => [
+    const headers = ["Nama", "Username", "Role", "Cabang", "Shift", "Waktu Login", "Waktu Logout", "Status", "Device", "IP Address"];
+    const rows = activities.map((activity) => [
       activity.name,
       activity.username,
       formatRoleLabel(activity.role),
@@ -255,46 +186,33 @@ function AktivitasLoginPage() {
       activity.status,
       activity.device,
       activity.ipAddress,
-      activity.note,
     ]);
 
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((item) => `"${item}"`).join(","))
-      .join("\n");
-
-    const blob = new Blob([csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
-
+    const csvContent = [headers, ...rows].map((row) => row.map((item) => `"${item}"`).join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-
     link.href = url;
     link.download = "aktivitas-login-nikky-frozen.csv";
     link.click();
-
     URL.revokeObjectURL(url);
     showSuccess("Data aktivitas login berhasil diexport.");
   };
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="min-h-screen bg-[#FEF6EC] px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">
-            Aktivitas Login
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Pantau aktivitas login owner dan kasir berdasarkan cabang, shift,
-            perangkat, dan status dari backend.
-          </p>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#C80503]">OWNER</p>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-[#2A1712] sm:text-3xl">Aktivitas Login</h1>
+          <p className="mt-1 text-sm font-semibold text-[#7A6258]">Pantau aktivitas login semua user dari seluruh cabang.</p>
         </div>
 
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
             onClick={handleRefresh}
-            className="rounded-xl border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-700 shadow-sm hover:bg-green-50"
+            className="rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-black text-[#2A1712] hover:bg-[#FFF6EA]"
           >
             Refresh Data
           </button>
@@ -302,7 +220,7 @@ function AktivitasLoginPage() {
           <button
             type="button"
             onClick={exportCSV}
-            className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-100"
+            className="rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-black text-[#2A1712] hover:bg-[#FFF6EA]"
           >
             Export CSV
           </button>
@@ -310,67 +228,40 @@ function AktivitasLoginPage() {
       </div>
 
       {successMessage && (
-        <div className="mb-5 rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-sm font-semibold text-green-700">
+        <div className="mb-4 rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-sm font-bold text-green-700">
           {successMessage}
         </div>
       )}
 
       {errorMessage && (
-        <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
+        <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
           {errorMessage}
         </div>
       )}
 
-      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-7">
-        <SummaryCard label="Total Aktivitas" value={totalActivity} />
-        <SummaryCard
-          label="Sedang Login"
-          value={activeLogin}
-          valueClass="text-green-600"
-        />
-        <SummaryCard
-          label="Sudah Logout"
-          value={logoutActivity}
-          valueClass="text-red-600"
-        />
-        <SummaryCard
-          label="Owner"
-          value={ownerActivity}
-          valueClass="text-purple-600"
-        />
-        <SummaryCard
-          label="Kasir"
-          value={cashierActivity}
-          valueClass="text-blue-600"
-        />
-        <SummaryCard
-          label="Cabang 1"
-          value={branchOneActivity}
-          valueClass="text-blue-600"
-        />
-        <SummaryCard
-          label="Cabang 2"
-          value={branchTwoActivity}
-          valueClass="text-purple-600"
-        />
+      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Total Aktivitas" value={summary.total_activities ?? 0} tone="red" />
+        <StatCard label="Sedang Login" value={summary.currently_login ?? 0} tone="green" />
+        <StatCard label="Sudah Logout" value={summary.logged_out ?? 0} tone="red" />
+        <StatCard label="Owner" value={summary.owner_count ?? 0} tone="red" />
+        <StatCard label="Admin" value={summary.admin_count ?? 0} tone="orange" />
+        <StatCard label="Kasir" value={summary.cashier_count ?? 0} tone="red" />
+        <StatCard label="Cabang 1" value={summary.branch_1_count ?? 0} tone="orange" />
+        <StatCard label="Cabang 2" value={summary.branch_2_count ?? 0} tone="orange" />
       </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-sm">
-        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="rounded-[24px] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm">
+        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-lg font-bold text-slate-800">
-              Riwayat Aktivitas Login
-            </h3>
-            <p className="text-sm text-slate-500">
-              Data diambil dari tabel login_activities backend.
-            </p>
+            <h2 className="text-lg font-black text-[#2A1712]">Riwayat Aktivitas Login</h2>
+            <p className="mt-1 text-sm font-medium text-[#7A6258]">Data diambil dari backend login_activities.</p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
             <select
               value={selectedRole}
-              onChange={(event) => setSelectedRole(event.target.value)}
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              onChange={(e) => setSelectedRole(e.target.value)}
+              className="rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]"
             >
               {roles.map((role) => (
                 <option key={role} value={role}>
@@ -381,8 +272,8 @@ function AktivitasLoginPage() {
 
             <select
               value={selectedBranch}
-              onChange={(event) => setSelectedBranch(event.target.value)}
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              className="rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]"
             >
               {branches.map((branch) => (
                 <option key={branch} value={branch}>
@@ -393,8 +284,8 @@ function AktivitasLoginPage() {
 
             <select
               value={selectedShift}
-              onChange={(event) => setSelectedShift(event.target.value)}
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              onChange={(e) => setSelectedShift(e.target.value)}
+              className="rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]"
             >
               {shifts.map((shift) => (
                 <option key={shift} value={shift}>
@@ -405,8 +296,8 @@ function AktivitasLoginPage() {
 
             <select
               value={selectedStatus}
-              onChange={(event) => setSelectedStatus(event.target.value)}
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]"
             >
               {statuses.map((status) => (
                 <option key={status} value={status}>
@@ -418,152 +309,119 @@ function AktivitasLoginPage() {
             <input
               type="date"
               value={selectedDate}
-              onChange={(event) => setSelectedDate(event.target.value)}
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]"
             />
 
             <input
               type="text"
               value={searchKeyword}
-              onChange={(event) => setSearchKeyword(event.target.value)}
+              onChange={(e) => setSearchKeyword(e.target.value)}
               placeholder="Cari user..."
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              className="rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#2A1712] placeholder-[#8A6F66] outline-none focus:border-[#C80503]"
             />
           </div>
         </div>
 
         {isLoading ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-[#EBCDB8] p-10 text-center text-sm font-semibold text-[#7A6258]">
             Mengambil data aktivitas login dari backend...
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1250px] border-collapse">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50 text-left text-sm text-slate-500">
-                  <th className="px-4 py-4 font-semibold">Pengguna</th>
-                  <th className="px-4 py-4 font-semibold">Role</th>
-                  <th className="px-4 py-4 font-semibold">Cabang</th>
-                  <th className="px-4 py-4 font-semibold">Shift</th>
-                  <th className="px-4 py-4 font-semibold">Login</th>
-                  <th className="px-4 py-4 font-semibold">Logout</th>
-                  <th className="px-4 py-4 font-semibold">Device</th>
-                  <th className="px-4 py-4 font-semibold">IP</th>
-                  <th className="px-4 py-4 font-semibold">Status</th>
-                  <th className="px-4 py-4 text-center font-semibold">
-                    Aksi
-                  </th>
+          <div className="overflow-x-auto rounded-2xl border border-[#EBCDB8]">
+            <table className="w-full min-w-[1250px] text-left text-sm">
+              <thead className="bg-[#FFF6EA] text-xs font-black uppercase text-[#7A6258]">
+                <tr>
+                  <th className="px-4 py-3">Pengguna</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Cabang</th>
+                  <th className="px-4 py-3">Shift</th>
+                  <th className="px-4 py-3">Login</th>
+                  <th className="px-4 py-3">Logout</th>
+                  <th className="px-4 py-3">Device</th>
+                  <th className="px-4 py-3">IP</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-center">Aksi</th>
                 </tr>
               </thead>
-
-              <tbody>
-                {filteredActivities.map((activity) => (
-                  <tr
-                    key={activity.id}
-                    className="border-b border-slate-100 text-sm hover:bg-slate-50"
-                  >
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`flex h-11 w-11 items-center justify-center rounded-2xl text-lg font-bold ${
+              <tbody className="divide-y divide-[#EBCDB8] bg-white">
+                {activities.length > 0 ? (
+                  activities.map((activity) => (
+                    <tr key={activity.id} className="hover:bg-[#FFFDF8]">
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-black ${
                             activity.role === "owner"
-                              ? "bg-purple-50 text-purple-600"
-                              : "bg-blue-50 text-blue-600"
-                          }`}
-                        >
-                          {activity.name?.charAt(0) || "U"}
+                              ? "bg-[#FFF6EA] text-[#C80503]"
+                              : activity.role === "admin"
+                              ? "bg-orange-50 text-orange-700"
+                              : "bg-gray-50 text-gray-700"
+                          }`}>
+                            {activity.name?.charAt(0) || "U"}
+                          </div>
+                          <div>
+                            <p className="font-black text-[#2A1712]">{activity.name}</p>
+                            <p className="text-xs font-semibold text-[#8A6F66]">@{activity.username}</p>
+                          </div>
                         </div>
+                      </td>
 
-                        <div>
-                          <p className="font-bold text-slate-800">
-                            {activity.name}
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            @{activity.username}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                      <td className="px-4 py-4">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-black ring-1 ${
                           activity.role === "owner"
-                            ? "bg-purple-100 text-purple-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}
-                      >
-                        {formatRoleLabel(activity.role)}
-                      </span>
-                    </td>
+                            ? "bg-[#FFF6EA] text-[#C80503] ring-[#F3D6C4]"
+                            : activity.role === "admin"
+                            ? "bg-orange-50 text-orange-700 ring-orange-100"
+                            : "bg-gray-50 text-gray-700 ring-gray-100"
+                        }`}>
+                          {formatRoleLabel(activity.role)}
+                        </span>
+                      </td>
 
-                    <td className="px-4 py-4 text-slate-600">
-                      {activity.branch}
-                    </td>
+                      <td className="px-4 py-4 font-semibold text-[#5F4B45]">{activity.branch}</td>
+                      <td className="px-4 py-4 font-semibold text-[#5F4B45]">{activity.shift}</td>
+                      <td className="px-4 py-4 font-semibold text-[#5F4B45]">{formatDateTime(activity.loginTime)}</td>
+                      <td className="px-4 py-4 font-semibold text-[#5F4B45]">{formatDateTime(activity.logoutTime)}</td>
+                      <td className="px-4 py-4 font-semibold text-[#5F4B45]">{activity.device}</td>
+                      <td className="px-4 py-4 font-semibold text-[#5F4B45]">{activity.ipAddress}</td>
 
-                    <td className="px-4 py-4 text-slate-600">
-                      {activity.shift}
-                    </td>
-
-                    <td className="px-4 py-4 text-slate-600">
-                      {formatDateTime(activity.loginTime)}
-                    </td>
-
-                    <td className="px-4 py-4 text-slate-600">
-                      {formatDateTime(activity.logoutTime)}
-                    </td>
-
-                    <td className="px-4 py-4 text-slate-600">
-                      {activity.device}
-                    </td>
-
-                    <td className="px-4 py-4 text-slate-600">
-                      {activity.ipAddress}
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                      <td className="px-4 py-4">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-black ring-1 ${
                           activity.status === "Login"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {activity.status}
-                      </span>
-                    </td>
+                            ? "bg-green-50 text-green-700 ring-green-100"
+                            : "bg-red-50 text-red-700 ring-red-100"
+                        }`}>
+                          {activity.status}
+                        </span>
+                      </td>
 
-                    <td className="px-4 py-4">
-                      <div className="flex justify-center gap-2">
-                        {activity.status === "Login" && (
+                      <td className="px-4 py-4">
+                        <div className="flex justify-center gap-2">
+                          {activity.status === "Login" && (
+                            <button
+                              type="button"
+                              onClick={() => handleForceLogout(activity)}
+                              className="rounded-xl border border-[#EBCDB8] bg-[#FFFDF8] px-3 py-2 text-xs font-black text-[#2A1712] hover:bg-[#FFF6EA]"
+                            >
+                              Force Logout
+                            </button>
+                          )}
+
                           <button
                             type="button"
-                            onClick={() => handleForceLogout(activity)}
-                            className="rounded-lg bg-yellow-50 px-3 py-2 text-xs font-bold text-yellow-700 hover:bg-yellow-100"
+                            onClick={() => handleDelete(activity)}
+                            className="rounded-xl border border-[#EBCDB8] bg-[#FFF6EA] px-3 py-2 text-xs font-black text-[#C80503] hover:bg-red-50"
                           >
-                            Force Logout
+                            Hapus
                           </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(activity)}
-                          className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-100"
-                        >
-                          Hapus
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-
-                {filteredActivities.length === 0 && (
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
                   <tr>
-                    <td
-                      colSpan="10"
-                      className="px-4 py-10 text-center text-sm text-slate-500"
-                    >
-                      Data aktivitas login tidak ditemukan.
+                    <td colSpan="10" className="p-8 text-center text-sm font-semibold text-[#7A6258]">
+                      {errorMessage || "Data aktivitas login tidak ditemukan."}
                     </td>
                   </tr>
                 )}
@@ -572,20 +430,25 @@ function AktivitasLoginPage() {
           </div>
         )}
 
-        <p className="mt-4 text-sm text-slate-500">
-          Menampilkan {filteredActivities.length} dari {activities.length} data
-          aktivitas login.
+        <p className="mt-4 text-sm font-semibold text-[#7A6258]">
+          Menampilkan {activities.length} data aktivitas login.
         </p>
       </div>
     </div>
   );
 }
 
-function SummaryCard({ label, value, valueClass = "text-slate-800" }) {
+function StatCard({ label, value, tone = "red" }) {
+  const tones = {
+    red: "bg-[#FFF6EA] text-[#C80503]",
+    green: "bg-green-50 text-green-600",
+    orange: "bg-orange-50 text-orange-600",
+  };
+
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <h3 className={`mt-2 text-2xl font-bold ${valueClass}`}>{value}</h3>
+    <div className="rounded-[24px] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm">
+      <p className="text-sm font-semibold text-[#7A6258]">{label}</p>
+      <p className={`mt-2 text-2xl font-black ${tones[tone] || tones.red}`}>{value}</p>
     </div>
   );
 }

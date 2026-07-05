@@ -25,8 +25,8 @@ import {
 
 import * as api from "../services/api";
 
-const PERMISSION_STORAGE_KEY = "nikky_kasir_permissions";
-const PERMISSION_MIGRATION_KEY = "nikky_permissions_initialized_v2";
+const PERMISSION_STORAGE_KEY = "nikky_user_permissions";
+const PERMISSION_MIGRATION_KEY = "nikky_permissions_initialized_v3";
 const SIDEBAR_COLLAPSED_KEY = "nikky_sidebar_collapsed_final";
 
 export const DEFAULT_KASIR_PERMISSIONS = [
@@ -108,57 +108,32 @@ function mergePermissions(savedPermissions) {
   });
 }
 
-function writeStoredKasirPermissions(permissions) {
-  const mergedPermissions = mergePermissions(permissions);
-
-  localStorage.setItem(
-    PERMISSION_STORAGE_KEY,
-    JSON.stringify(
-      mergedPermissions.map((permission) => ({
-        id: permission.id,
-        name: permission.name,
-        kasirAccess: Boolean(permission.kasirAccess),
-      })),
-    ),
-  );
-
-  return mergedPermissions;
+function writeStoredPermissions(permissions, role) {
+  const key = `${PERMISSION_STORAGE_KEY}_${role}`;
+  localStorage.setItem(key, JSON.stringify(permissions));
+  window.dispatchEvent(new Event("nikky_permissions_updated"));
 }
 
-function isOldThreeMenuOnly(permissions) {
-  const activeIds = permissions
-    .filter((permission) => permission.kasirAccess)
-    .map((permission) => permission.id)
-    .sort();
+function getStoredPermissions(role) {
+  const key = `${PERMISSION_STORAGE_KEY}_${role}`;
+  const saved = localStorage.getItem(key);
 
-  return activeIds.join(",") === "pos,shift,transaksi";
-}
-
-function getStoredKasirPermissions() {
-  const savedPermissions = localStorage.getItem(PERMISSION_STORAGE_KEY);
-  const migrationDone =
-    localStorage.getItem(PERMISSION_MIGRATION_KEY) === "true";
-
-  if (!savedPermissions) {
-    localStorage.setItem(PERMISSION_MIGRATION_KEY, "true");
-    return writeStoredKasirPermissions(DEFAULT_KASIR_PERMISSIONS);
-  }
-
-  try {
-    const mergedPermissions = mergePermissions(JSON.parse(savedPermissions));
-
-    if (!migrationDone && isOldThreeMenuOnly(mergedPermissions)) {
-      localStorage.setItem(PERMISSION_MIGRATION_KEY, "true");
-      return writeStoredKasirPermissions(DEFAULT_KASIR_PERMISSIONS);
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (error) {
+      console.error("Gagal membaca permission dari localStorage:", error);
+      return [];
     }
-
-    localStorage.setItem(PERMISSION_MIGRATION_KEY, "true");
-    return writeStoredKasirPermissions(mergedPermissions);
-  } catch {
-    localStorage.setItem(PERMISSION_MIGRATION_KEY, "true");
-    return writeStoredKasirPermissions(DEFAULT_KASIR_PERMISSIONS);
   }
+  return [];
 }
+
+function getSavedPermissions(role) {
+  return getStoredPermissions(role);
+}
+
+export { getSavedPermissions };
 
 function getInitialCollapsedState() {
   return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
@@ -167,21 +142,24 @@ function getInitialCollapsedState() {
 function Sidebar({ isOpen = false, onClose = () => {} }) {
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState(null);
+  const initialUser = useMemo(() => getCurrentUser(), []);
+  const initialRole = String(initialUser?.role || "kasir").toLowerCase();
+
+  const [currentUser, setCurrentUser] = useState(initialUser);
   const [permissions, setPermissions] = useState(() =>
-    getStoredKasirPermissions(),
+    getStoredPermissions(initialRole),
   );
   const [isCollapsed, setIsCollapsed] = useState(getInitialCollapsedState);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const userRole = String(currentUser?.role || "").toLowerCase();
+  const userRole = String(currentUser?.role || "kasir").toLowerCase();
 
   const isOwner = userRole === "owner";
   const isAdmin = userRole === "admin";
   const isKasir = userRole === "kasir";
 
   const syncPermissions = () => {
-    setPermissions(getStoredKasirPermissions());
+    setPermissions(getStoredPermissions(userRole));
   };
 
   const toggleCollapse = () => {
@@ -224,11 +202,16 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
     if (isAdmin) return adminMenus;
 
     if (isKasir) {
-      return kasirMenus;
+      const kasirPermissions = getStoredPermissions("kasir");
+      const fallback = kasirPermissions.length > 0 ? kasirPermissions : DEFAULT_KASIR_PERMISSIONS;
+      return kasirMenus.filter((menu) => {
+        const permission = fallback.find((p) => p.id === menu.permissionId);
+        return permission && permission.kasirAccess;
+      });
     }
 
     return [];
-  }, [isOwner, isAdmin, isKasir, permissions]);
+  }, [isOwner, isAdmin, isKasir, permissions, userRole]);
 
   const clearLoginSession = () => {
     localStorage.removeItem("nikky_user");

@@ -4,11 +4,8 @@ import {
   Boxes,
   CalendarClock,
   CheckCircle2,
-  ChevronRight,
   ImageOff,
   Loader2,
-  MapPin,
-  PackageCheck,
   PackageMinus,
   RefreshCcw,
   Search,
@@ -16,7 +13,6 @@ import {
   ArrowRightLeft,
   PackagePlus,
   Edit,
-  Snowflake,
   TriangleAlert,
   Warehouse,
 } from "lucide-react";
@@ -74,19 +70,18 @@ function getCurrentUser() {
 
 function normalizeProduct(product) {
   return {
-    id: product.id,
-    branchId: product.branch_id,
-    branchName: product.branch?.name || `Cabang ${product.branch_id || "-"}`,
-    code: product.code || "-",
-    name: product.name || "-",
-    category: product.category || "Lainnya",
-    warehouseStock: Number(product.warehouse_stock || 0),
-    storeStock: Number(product.store_stock || 0),
-    price: Number(product.price || 0),
-    expiredDate: product.expired_date || null,
-    storageLocation: product.storage_location || "-",
-    image: product.image || null,
-    status: product.status || "active",
+    id: product?.id,
+    branchId: product?.branch_id ?? null,
+    branchName: product?.branch?.name || `Cabang ${product?.branch_id || "-"}`,
+    code: product?.code || "-",
+    name: product?.name || "-",
+    category: product?.category || "Lainnya",
+    stock: Number(product?.stock ?? 0),
+    price: Number(product?.price || 0),
+    expiredDate: product?.expired_date || null,
+    storageLocation: product?.storage_location || "-",
+    image: product?.image || null,
+    status: product?.status || "active",
   };
 }
 
@@ -105,23 +100,18 @@ function getDaysUntilExpired(dateString) {
 }
 
 function getStockStatus(product) {
-  if (product.warehouseStock <= 0 && product.storeStock <= 0) {
+  const stock = product.stock ?? 0;
+
+  if (stock <= 0) {
     return {
-      label: "Habis Total",
+      label: "Kosong",
       className: "bg-red-50 text-red-700 border-red-200",
     };
   }
 
-  if (product.storeStock <= 0) {
+  if (stock <= 5) {
     return {
-      label: "Toko Kosong",
-      className: "bg-orange-50 text-orange-700 border-orange-200",
-    };
-  }
-  
-  if (product.warehouseStock <= 0) {
-    return {
-      label: "Gudang Kosong",
+      label: "Rendah",
       className: "bg-orange-50 text-orange-700 border-orange-200",
     };
   }
@@ -202,15 +192,8 @@ function ProductTableRow({ product }) {
         {formatRupiah(product.price)}
       </td>
 
-      <td className="whitespace-nowrap px-4 py-3">
-        <div className="flex flex-col">
-          <span className="text-sm font-black text-[#2A1712]">
-            Gudang: {product.warehouseStock}
-          </span>
-          <span className="text-sm font-bold text-[#7A6258]">
-            Toko: {product.storeStock}
-          </span>
-        </div>
+      <td className="whitespace-nowrap px-4 py-3 text-sm font-black text-[#2A1712]">
+        {product.stock}
       </td>
 
       <td className="whitespace-nowrap px-4 py-3">
@@ -242,89 +225,73 @@ function ProductTableRow({ product }) {
 
 function AdminDashboard() {
   const currentUser = getCurrentUser();
-  const [products, setProducts] = useState([]);
+  const [dashboardData, setDashboardData] = useState({
+    summary: {
+      total_products: 0,
+      total_stock: 0,
+      empty_stock_count: 0,
+      low_stock_count: 0,
+      expired_count: 0,
+      expiring_soon_count: 0,
+    },
+    lowest_stock: [],
+    products: [],
+    recent_activities: [],
+    empty_stock_products: [],
+    low_stock_products: [],
+    expired_products: [],
+    expiring_soon_products: [],
+  });
   const [searchKeyword, setSearchKeyword] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("semua");
-  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [recentActivities, setRecentActivities] = useState([]);
-  const [isLoadingActivities, setIsLoadingActivities] = useState(false);
 
-  const fetchProducts = async () => {
+  const fetchDashboard = async () => {
     try {
-      setIsLoadingProducts(true);
+      setIsLoadingDashboard(true);
       setErrorMessage("");
 
-      const result = await api.getProducts({ branch_id: currentUser?.branch_id });
+      const params = currentUser?.branch_id ? { branch_id: currentUser.branch_id } : {};
+      const result = await api.getAdminDashboard(params);
 
-      const productList = Array.isArray(result) ? result : [];
-      setProducts(productList.map(normalizeProduct));
+      setDashboardData({
+        summary: {
+          total_products: Number(result?.summary?.total_products || 0),
+          total_stock: Number(result?.summary?.total_stock || 0),
+          empty_stock_count: Number(result?.summary?.empty_stock_count || 0),
+          low_stock_count: Number(result?.summary?.low_stock_count || 0),
+          expired_count: Number(result?.summary?.expired_count || 0),
+          expiring_soon_count: Number(result?.summary?.expiring_soon_count || 0),
+        },
+        lowest_stock: Array.isArray(result?.lowest_stock) ? result.lowest_stock.map(normalizeProduct) : [],
+        products: Array.isArray(result?.products) ? result.products.map(normalizeProduct) : [],
+        recent_activities: Array.isArray(result?.recent_activities) ? result.recent_activities : [],
+        empty_stock_products: Array.isArray(result?.empty_stock_products) ? result.empty_stock_products.map(normalizeProduct) : [],
+        low_stock_products: Array.isArray(result?.low_stock_products) ? result.low_stock_products.map(normalizeProduct) : [],
+        expired_products: Array.isArray(result?.expired_products) ? result.expired_products.map(normalizeProduct) : [],
+        expiring_soon_products: Array.isArray(result?.expiring_soon_products) ? result.expiring_soon_products.map(normalizeProduct) : [],
+      });
     } catch (error) {
-      console.error("Gagal mengambil produk:", error);
+      console.error("Gagal mengambil dashboard admin:", error);
       setErrorMessage(
-        "Data produk gagal dimuat. Pastikan backend Laravel sedang berjalan.",
+        error?.message || "Data dashboard gagal dimuat. Pastikan backend Laravel sedang berjalan.",
       );
     } finally {
-      setIsLoadingProducts(false);
-    }
-  };
-
-  const fetchActivities = async () => {
-    try {
-      setIsLoadingActivities(true);
-      const res = await api.getStockHistories({ branch_id: currentUser?.branch_id });
-      setRecentActivities(Array.isArray(res) ? res.slice(0, 5) : []);
-    } catch (error) {
-      console.error("Gagal mengambil aktivitas:", error);
-    } finally {
-      setIsLoadingActivities(false);
+      setIsLoadingDashboard(false);
     }
   };
 
   useEffect(() => {
     if (currentUser) {
-      fetchProducts();
-      fetchActivities();
+      fetchDashboard();
     }
   }, [currentUser?.branch_id]);
-
-  const summary = useMemo(() => {
-    const activeProducts = products.filter(
-      (product) => String(product.status).toLowerCase() === "active",
-    );
-
-    const totalWarehouseStock = activeProducts.reduce((sum, p) => sum + p.warehouseStock, 0);
-    const totalStoreStock = activeProducts.reduce((sum, p) => sum + p.storeStock, 0);
-
-    const storeEmptyProducts = activeProducts.filter((p) => p.storeStock <= 0);
-    const warehouseEmptyProducts = activeProducts.filter((p) => p.warehouseStock <= 0);
-
-    const expiredProducts = activeProducts.filter((product) => {
-      const days = getDaysUntilExpired(product.expiredDate);
-      return days !== null && days < 0;
-    });
-
-    const expiringSoonProducts = activeProducts.filter((product) => {
-      const days = getDaysUntilExpired(product.expiredDate);
-      return days !== null && days >= 0 && days <= 30;
-    });
-
-    return {
-      activeProducts,
-      totalProducts: activeProducts.length,
-      totalWarehouseStock,
-      totalStoreStock,
-      storeEmptyProducts,
-      warehouseEmptyProducts,
-      expiredProducts,
-      expiringSoonProducts,
-    };
-  }, [products]);
 
   const filteredProducts = useMemo(() => {
     const keyword = searchKeyword.toLowerCase().trim();
 
-    return summary.activeProducts
+    return dashboardData.products
       .filter((product) => {
         const matchSearch =
           product.name.toLowerCase().includes(keyword) ||
@@ -352,12 +319,12 @@ function AdminDashboard() {
           "Habis Total": 1,
           "Toko Kosong": 2,
           "Gudang Kosong": 3,
-          "Aman": 4,
+          Aman: 4,
         };
 
         return order[aStatus] - order[bStatus];
       });
-  }, [summary.activeProducts, searchKeyword, selectedFilter]);
+  }, [dashboardData.products, searchKeyword, selectedFilter]);
 
   if (!currentUser) return null;
 
@@ -373,37 +340,37 @@ function AdminDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           title="Total Produk"
-          value={summary.totalProducts}
+          value={dashboardData.summary.total_products}
           description="Jenis produk aktif"
           icon={Boxes}
         />
 
         <StatCard
-          title="Total Stok Gudang"
-          value={summary.totalWarehouseStock}
-          description="Fisik di gudang"
+          title="Total Stok"
+          value={dashboardData.summary.total_stock}
+          description="Total seluruh stok cabang"
           icon={Warehouse}
         />
 
         <StatCard
-          title="Total Stok Toko"
-          value={summary.totalStoreStock}
-          description="Fisik di rak depan"
-          icon={PackageCheck}
+          title="Stok Kosong"
+          value={dashboardData.summary.empty_stock_count}
+          description="Produk dengan stok 0"
+          icon={PackageMinus}
         />
 
         <StatCard
-          title="Toko Kosong"
-          value={summary.storeEmptyProducts.length}
-          description="Stok display habis"
+          title="Stok Rendah"
+          value={dashboardData.summary.low_stock_count}
+          description="Produk stok ≤ 5"
           icon={TriangleAlert}
         />
 
         <StatCard
-          title="Gudang Kosong"
-          value={summary.warehouseEmptyProducts.length}
-          description="Stok simpanan habis"
-          icon={PackageMinus}
+          title="Expired / Segera"
+          value={dashboardData.summary.expired_count + dashboardData.summary.expiring_soon_count}
+          description="Produk expired atau hampir expired"
+          icon={CalendarClock}
         />
       </div>
 
@@ -425,26 +392,24 @@ function AdminDashboard() {
                 <thead className="border-b border-[#EBCDB8] text-xs font-black uppercase text-[#7A6258]">
                   <tr>
                     <th className="pb-3 pr-4">Produk</th>
-                    <th className="pb-3 px-4 text-right">Stok Toko</th>
-                    <th className="pb-3 px-4 text-right">Stok Gudang</th>
+                    <th className="pb-3 px-4">Kode</th>
+                    <th className="pb-3 px-4">Cabang</th>
+                    <th className="pb-3 px-4 text-right">Stok</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EBCDB8]">
-                  {summary.activeProducts
-                    .filter(p => p.storeStock > 0 || p.warehouseStock > 0)
-                    .sort((a, b) => (a.storeStock + a.warehouseStock) - (b.storeStock + b.warehouseStock))
-                    .slice(0, 5)
-                    .map(p => (
-                      <tr key={p.id} className="hover:bg-[#FFF6EA] transition">
-                        <td className="py-3 pr-4 font-black text-[#2A1712] text-sm">{p.name}</td>
-                        <td className="py-3 px-4 text-right font-bold text-[#C80503]">{p.storeStock}</td>
-                        <td className="py-3 px-4 text-right font-bold text-[#7A6258]">{p.warehouseStock}</td>
-                      </tr>
-                    ))}
-                  {summary.activeProducts.length === 0 && (
-                     <tr>
-                       <td colSpan={3} className="py-4 text-center text-sm font-medium text-[#7A6258]">Tidak ada data.</td>
-                     </tr>
+                  {dashboardData.lowest_stock.map((product) => (
+                    <tr key={product.id} className="hover:bg-[#FFF6EA] transition">
+                      <td className="py-3 pr-4 font-black text-[#2A1712] text-sm">{product.name}</td>
+                      <td className="py-3 px-4 font-bold text-[#7A6258]">{product.code}</td>
+                      <td className="py-3 px-4 font-bold text-[#7A6258]">{product.branchName}</td>
+                      <td className="py-3 px-4 text-right font-bold text-[#C80503]">{product.stock}</td>
+                    </tr>
+                  ))}
+                  {dashboardData.lowest_stock.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="py-4 text-center text-sm font-medium text-[#7A6258]">Tidak ada data.</td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -463,10 +428,11 @@ function AdminDashboard() {
 
               <button
                 type="button"
-                onClick={fetchProducts}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#EBCDB8] bg-white px-4 py-2 text-sm font-black text-[#2A1712] transition hover:bg-[#FFF6EA]"
+                onClick={fetchDashboard}
+                disabled={isLoadingDashboard}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#EBCDB8] bg-white px-4 py-2 text-sm font-black text-[#2A1712] transition hover:bg-[#FFF6EA] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                <RefreshCcw className="h-4 w-4" />
+                <RefreshCcw className={`h-4 w-4 ${isLoadingDashboard ? "animate-spin" : ""}`} />
                 Refresh Data
               </button>
             </div>
@@ -513,11 +479,11 @@ function AdminDashboard() {
           )}
 
           <div className="overflow-hidden rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] shadow-sm">
-            {isLoadingProducts ? (
+            {isLoadingDashboard ? (
               <div className="p-10 text-center">
                 <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#C80503]" />
                 <p className="mt-3 font-bold text-[#7A6258]">
-                  Memuat data produk...
+                  Memuat data dashboard...
                 </p>
               </div>
             ) : filteredProducts.length > 0 ? (
@@ -527,7 +493,7 @@ function AdminDashboard() {
                     <tr className="text-left text-xs font-black uppercase tracking-wide text-[#7A6258]">
                       <th className="py-4 pl-4 pr-4">Produk</th>
                       <th className="px-4 py-4">Harga</th>
-                      <th className="px-4 py-4">Stok (G/T)</th>
+                      <th className="px-4 py-4">Stok</th>
                       <th className="px-4 py-4">Status</th>
                       <th className="px-4 py-4">Lokasi Gudang</th>
                       <th className="px-4 py-4">Expired</th>
@@ -571,16 +537,16 @@ function AdminDashboard() {
             </div>
 
             <div className="space-y-3">
-              {isLoadingActivities ? (
+              {isLoadingDashboard ? (
                 <div className="p-4 text-center">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-[#C80503]" />
                 </div>
-              ) : recentActivities.length > 0 ? (
-                recentActivities.map((activity) => {
+              ) : dashboardData.recent_activities.length > 0 ? (
+                dashboardData.recent_activities.map((activity) => {
                   let label = "Mutasi";
                   let Icon = ArrowRightLeft;
                   let colorClass = "bg-blue-50 text-blue-700 border-blue-200";
-                  
+
                   if (activity.type === "restock_warehouse") {
                     label = "Restock";
                     Icon = Warehouse;
@@ -622,10 +588,10 @@ function AdminDashboard() {
             <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#EBCDB8] pb-4">
               <div>
                 <h2 className="text-lg font-black text-[#2A1712]">
-                  Perlu Dicek (Toko)
+                  Stok Kosong
                 </h2>
                 <p className="mt-1 text-sm font-medium text-[#7A6258]">
-                  Produk kosong di toko (kasir).
+                  Produk dengan stok 0.
                 </p>
               </div>
 
@@ -635,8 +601,8 @@ function AdminDashboard() {
             </div>
 
             <div className="space-y-3">
-              {summary.storeEmptyProducts.length > 0 ? (
-                summary.storeEmptyProducts.slice(0, 5).map((product) => (
+              {dashboardData.empty_stock_products.length > 0 ? (
+                dashboardData.empty_stock_products.map((product) => (
                   <div
                     key={`${product.id}-${product.code}`}
                     className="flex items-center justify-between gap-3 rounded-xl bg-white border border-[#EBCDB8] px-4 py-3"
@@ -646,32 +612,32 @@ function AdminDashboard() {
                         {product.name}
                       </p>
                       <p className="truncate text-xs font-semibold text-[#7A6258]">
-                        Gudang: {product.warehouseStock} | Toko: 0
+                        Stok: {product.stock}
                       </p>
                     </div>
 
-                    <span className="shrink-0 rounded-full bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-700 border border-orange-200">
-                      Butuh Mutasi
+                    <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700 border border-red-200">
+                      Habis
                     </span>
                   </div>
                 ))
               ) : (
                 <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-4 text-center text-sm font-bold text-green-700">
                   <CheckCircle2 className="mx-auto mb-2 h-6 w-6" />
-                  Stok toko aman.
+                  Tidak ada stok kosong.
                 </div>
               )}
             </div>
           </div>
-          
+
           <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#EBCDB8] pb-4">
               <div>
                 <h2 className="text-lg font-black text-[#2A1712]">
-                  Perlu Dicek (Gudang)
+                  Stok Rendah
                 </h2>
                 <p className="mt-1 text-sm font-medium text-[#7A6258]">
-                  Produk kosong di gudang.
+                  Produk dengan stok menipis (≤ 5).
                 </p>
               </div>
 
@@ -681,8 +647,8 @@ function AdminDashboard() {
             </div>
 
             <div className="space-y-3">
-              {summary.warehouseEmptyProducts.length > 0 ? (
-                summary.warehouseEmptyProducts.slice(0, 5).map((product) => (
+              {dashboardData.low_stock_products.length > 0 ? (
+                dashboardData.low_stock_products.map((product) => (
                   <div
                     key={`${product.id}-${product.code}`}
                     className="flex items-center justify-between gap-3 rounded-xl bg-white border border-[#EBCDB8] px-4 py-3"
@@ -692,25 +658,25 @@ function AdminDashboard() {
                         {product.name}
                       </p>
                       <p className="truncate text-xs font-semibold text-[#7A6258]">
-                        Toko: {product.storeStock} | Gudang: 0
+                        Stok: {product.stock}
                       </p>
                     </div>
 
-                    <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700 border border-red-200">
-                      Butuh Restock
+                    <span className="shrink-0 rounded-full bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-700 border border-orange-200">
+                      Menipis
                     </span>
                   </div>
                 ))
               ) : (
                 <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-4 text-center text-sm font-bold text-green-700">
                   <CheckCircle2 className="mx-auto mb-2 h-6 w-6" />
-                  Stok gudang aman.
+                  Semua stok aman.
                 </div>
               )}
             </div>
           </div>
 
-          {(summary.expiredProducts.length > 0 || summary.expiringSoonProducts.length > 0) && (
+          {(dashboardData.expired_products.length > 0 || dashboardData.expiring_soon_products.length > 0) && (
             <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#EBCDB8] pb-4">
                 <div>
@@ -728,7 +694,7 @@ function AdminDashboard() {
               </div>
 
               <div className="space-y-3">
-                {[...summary.expiredProducts, ...summary.expiringSoonProducts].slice(0, 5).map((product) => {
+                {[...dashboardData.expired_products, ...dashboardData.expiring_soon_products].slice(0, 5).map((product) => {
                    const days = getDaysUntilExpired(product.expiredDate);
                    const isExpired = days < 0;
                    return (

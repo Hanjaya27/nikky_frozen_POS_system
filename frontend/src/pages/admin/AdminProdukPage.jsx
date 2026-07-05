@@ -22,10 +22,9 @@ function formatRupiah(val) {
   }).format(Number(val || 0));
 }
 
-function getStockStatusConfig(stock, isWarehouse = false) {
-  const min = isWarehouse ? 5 : 3;
+function getStockStatusConfig(stock) {
   if (stock <= 0) return { label: "Habis", className: "bg-red-50 text-red-700 border-red-200" };
-  if (stock <= min) return { label: "Menipis", className: "bg-orange-50 text-orange-700 border-orange-200" };
+  if (stock <= 5) return { label: "Menipis", className: "bg-orange-50 text-orange-700 border-orange-200" };
   return { label: "Aman", className: "bg-green-50 text-green-700 border-green-200" };
 }
 
@@ -57,8 +56,7 @@ function AdminProdukPage() {
     code: "",
     name: "",
     category: "",
-    store_stock: 0,
-    warehouse_stock: 0,
+    stock: 0,
     price: 0,
     expired_date: "",
     image_url: "",
@@ -91,8 +89,7 @@ function AdminProdukPage() {
         code: product.code || "",
         name: product.name || "",
         category: product.category || "",
-        store_stock: product.store_stock || 0,
-        warehouse_stock: product.warehouse_stock || 0,
+        stock: product.stock || 0,
         price: product.price || 0,
         expired_date: product.expired_date ? product.expired_date.split("T")[0] : "",
         image_url: product.image || "",
@@ -103,8 +100,7 @@ function AdminProdukPage() {
         code: "",
         name: "",
         category: "",
-        store_stock: 0,
-        warehouse_stock: 0,
+        stock: 0,
         price: 0,
         expired_date: "",
         image_url: "",
@@ -121,8 +117,7 @@ function AdminProdukPage() {
       payload.append("code", formData.code);
       payload.append("name", formData.name);
       payload.append("category", formData.category);
-      payload.append("store_stock", formData.store_stock);
-      payload.append("warehouse_stock", formData.warehouse_stock);
+      payload.append("stock", formData.stock);
       payload.append("price", formData.price);
       if (formData.expired_date) payload.append("expired_date", formData.expired_date);
       if (imageFile) payload.append("image", imageFile);
@@ -157,14 +152,14 @@ function AdminProdukPage() {
       ? p.branch_id === currentUser?.branch_id 
       : p.branch_id !== currentUser?.branch_id;
     
-    let matchStatus = true;
-    if (statusFilter !== "semua") {
-      const isHabis = p.store_stock <= 0 || p.warehouse_stock <= 0;
-      const isMenipis = !isHabis && (p.store_stock <= 3 || p.warehouse_stock <= 5);
-      if (statusFilter === "habis") matchStatus = isHabis;
-      if (statusFilter === "menipis") matchStatus = isMenipis;
-      if (statusFilter === "aman") matchStatus = !isHabis && !isMenipis;
-    }
+      let matchStatus = true;
+      if (statusFilter !== "semua") {
+        const isHabis = (p.stock ?? 0) <= 0;
+        const isMenipis = !isHabis && (p.stock ?? 0) <= 5;
+        if (statusFilter === "habis") matchStatus = isHabis;
+        if (statusFilter === "menipis") matchStatus = isMenipis;
+        if (statusFilter === "aman") matchStatus = !isHabis && !isMenipis;
+      }
     
     return matchSearch && matchBranch && matchStatus;
   });
@@ -177,7 +172,7 @@ function AdminProdukPage() {
         <div>
           <h1 className="text-2xl font-black text-[#2A1712]">Kelola Produk</h1>
           <p className="mt-1 text-sm font-semibold text-[#7A6258]">
-            Kelola produk, stok gudang, mutasi, dan riwayat stok cabang Anda.
+            Kelola produk dan stok cabang Anda.
           </p>
         </div>
         {viewBranch === "saya" && (
@@ -193,10 +188,10 @@ function AdminProdukPage() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 mb-2">
         {[
           { label: "Total Produk", value: products.length },
-          { label: "Stok Toko", value: products.reduce((acc, p) => acc + (p.store_stock || 0), 0) },
-          { label: "Stok Gudang", value: products.reduce((acc, p) => acc + (p.warehouse_stock || 0), 0) },
-          { label: "Produk Menipis", value: products.filter(p => p.store_stock > 0 && p.store_stock <= 3).length },
-          { label: "Produk Habis", value: products.filter(p => p.store_stock <= 0).length }
+          { label: "Total Stok", value: products.reduce((acc, p) => acc + (p.stock || 0), 0) },
+          { label: "Produk Menipis", value: products.filter(p => p.stock > 0 && p.stock <= 5).length },
+          { label: "Produk Habis", value: products.filter(p => p.stock <= 0).length },
+          { label: "Expired / Segera", value: products.filter(p => getExpiredBadge(p.expired_date)).length }
         ].map((stat, i) => (
           <div key={i} className="rounded-xl border border-[#EBCDB8] bg-[#FFFDF8] p-4 shadow-sm flex flex-col">
             <span className="text-xs font-bold text-[#7A6258] mb-1">{stat.label}</span>
@@ -258,8 +253,7 @@ function AdminProdukPage() {
                 <th className="px-4 py-3">Kategori</th>
                 {viewBranch === "lain" && <th className="px-4 py-3">Cabang</th>}
                 <th className="px-4 py-3 text-right">Harga</th>
-                <th className="px-4 py-3 text-right w-24">Stok Toko</th>
-                <th className="px-4 py-3 text-right w-24">Stok Gudang</th>
+                <th className="px-4 py-3 text-right w-24">Stok</th>
                 <th className="px-4 py-3">Expired</th>
                 <th className="px-4 py-3">Status</th>
                 {viewBranch === "saya" && <th className="px-4 py-3 text-center w-24">Aksi</th>}
@@ -288,8 +282,7 @@ function AdminProdukPage() {
                     <td className="px-4 py-3 font-bold text-[#2A1712]">{p.branch?.name || "-"}</td>
                   )}
                   <td className="px-4 py-3 text-right font-black text-[#C80503]">{formatRupiah(p.price)}</td>
-                  <td className="px-4 py-3 text-right font-black text-[#2A1712]">{p.store_stock}</td>
-                  <td className="px-4 py-3 text-right font-black text-[#2A1712]">{p.warehouse_stock}</td>
+                    <td className="px-4 py-3 text-right font-black text-[#2A1712]">{p.stock}</td>
                   <td className="px-4 py-3">
                     {p.expired_date ? (
                       <div className="flex flex-col items-start gap-1">
@@ -304,16 +297,11 @@ function AdminProdukPage() {
                       <span className="text-[#7A6258] font-bold">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col items-start gap-1.5">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStockStatusConfig(p.store_stock, false).className}`}>
-                        Toko: {getStockStatusConfig(p.store_stock, false).label}
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStockStatusConfig(p.stock).className}`}>
+                        Stok: {getStockStatusConfig(p.stock).label}
                       </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStockStatusConfig(p.warehouse_stock, true).className}`}>
-                        Gudang: {getStockStatusConfig(p.warehouse_stock, true).label}
-                      </span>
-                    </div>
-                  </td>
+                    </td>
                   {viewBranch === "saya" && (
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1.5">
@@ -338,7 +326,7 @@ function AdminProdukPage() {
               ))}
               {!isLoading && filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={viewBranch === "lain" ? 8 : 9} className="px-5 py-12 text-center text-[#7A6258] font-medium bg-white">
+                  <td colSpan={viewBranch === "lain" ? 7 : 8} className="px-5 py-12 text-center text-[#7A6258] font-medium bg-white">
                     Tidak ada produk ditemukan.
                   </td>
                 </tr>
@@ -414,16 +402,10 @@ function AdminProdukPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-[#7A6258] mb-1.5">Stok Toko</label>
-                        <input required type="number" min="0" value={formData.store_stock} onChange={(e) => setFormData({ ...formData, store_stock: e.target.value })} className="w-full rounded-xl border border-[#EBCDB8] bg-white px-3 py-2.5 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20 transition" placeholder="0" />
+                    <div>
+                        <label className="block text-xs font-bold text-[#7A6258] mb-1.5">Stok</label>
+                        <input required type="number" min="0" value={formData.stock} onChange={(e) => setFormData({ ...formData, stock: e.target.value })} className="w-full rounded-xl border border-[#EBCDB8] bg-white px-3 py-2.5 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20 transition" placeholder="0" />
                       </div>
-                      <div>
-                        <label className="block text-xs font-bold text-[#7A6258] mb-1.5">Stok Gudang</label>
-                        <input required type="number" min="0" value={formData.warehouse_stock} onChange={(e) => setFormData({ ...formData, warehouse_stock: e.target.value })} className="w-full rounded-xl border border-[#EBCDB8] bg-white px-3 py-2.5 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20 transition" placeholder="0" />
-                      </div>
-                    </div>
 
                     <div>
                       <label className="block text-xs font-bold text-[#7A6258] mb-1.5">Tanggal Expired (Opsional)</label>

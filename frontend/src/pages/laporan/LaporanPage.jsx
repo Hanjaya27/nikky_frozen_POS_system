@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
   Download,
   FileText,
+  Loader2,
   PackageCheck,
   RefreshCw,
   ReceiptText,
@@ -21,90 +22,12 @@ import {
   YAxis,
 } from "recharts";
 
-const transactions = [
-  {
-    id: 1,
-    invoice: "TRX-001",
-    date: new Date().toISOString(),
-    branch: "Cabang 1",
-    cashier: "Kasir 1",
-    payment: "Tunai",
-    status: "Lunas",
-    total: 120000,
-    items: [{ name: "Nugget Ayam", qty: 2 }],
-  },
-  {
-    id: 2,
-    invoice: "TRX-002",
-    date: new Date().toISOString(),
-    branch: "Cabang 2",
-    cashier: "Kasir 2",
-    payment: "QRIS",
-    status: "Lunas",
-    total: 85000,
-    items: [{ name: "Sosis Sapi", qty: 1 }],
-  },
-  {
-    id: 3,
-    invoice: "TRX-003",
-    date: new Date(Date.now() - 86400000).toISOString(),
-    branch: "Cabang 1",
-    cashier: "Kasir 1",
-    payment: "Transfer",
-    status: "Lunas",
-    total: 450000,
-    items: [{ name: "Chicken Wings", qty: 3 }],
-  },
-  {
-    id: 4,
-    invoice: "TRX-004",
-    date: new Date(Date.now() - 2 * 86400000).toISOString(),
-    branch: "Cabang 2",
-    cashier: "Kasir 2",
-    payment: "QRIS",
-    status: "Lunas",
-    total: 210000,
-    items: [{ name: "Beef Slice", qty: 2 }],
-  },
-];
-
-const expenses = [
-  {
-    id: 1,
-    date: new Date().toISOString(),
-    branch: "Cabang 1",
-    category: "Operasional",
-    description: "Belanja operasional toko",
-    amount: 250000,
-  },
-  {
-    id: 2,
-    date: new Date(Date.now() - 86400000).toISOString(),
-    branch: "Cabang 2",
-    category: "Listrik",
-    description: "Bayar listrik toko",
-    amount: 850000,
-  },
-  {
-    id: 3,
-    date: new Date(Date.now() - 2 * 86400000).toISOString(),
-    branch: "Cabang 1",
-    category: "Kemasan",
-    description: "Plastik dan kantong belanja",
-    amount: 120000,
-  },
-];
+import * as api from "../../services/api";
 
 const periodOptions = [
   { id: "today", label: "Hari Ini" },
-  { id: "week", label: "7 Hari" },
+  { id: "7days", label: "7 Hari" },
   { id: "month", label: "Bulan Ini" },
-];
-
-const branchOptions = [
-  { id: "all", label: "Semua Cabang" },
-  { id: "Cabang 1", label: "Cabang 1" },
-  { id: "Cabang 2", label: "Cabang 2" },
 ];
 
 const tabs = [
@@ -123,19 +46,17 @@ function rupiah(value) {
 
 function shortRupiah(value) {
   const number = Number(value || 0);
-
   if (number >= 1000000) {
     return `Rp ${(number / 1000000).toFixed(1).replace(".", ",")}jt`;
   }
-
   if (number >= 1000) {
     return `Rp ${Math.round(number / 1000)}rb`;
   }
-
   return `Rp ${number}`;
 }
 
 function formatDate(dateString) {
+  if (!dateString) return "-";
   return new Date(dateString).toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "short",
@@ -144,79 +65,39 @@ function formatDate(dateString) {
 }
 
 function formatTime(dateString) {
+  if (!dateString) return "-";
   return new Date(dateString).toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
-function getRange(period) {
-  const now = new Date();
-  const start = new Date(now);
-  const end = new Date(now);
-
-  end.setHours(23, 59, 59, 999);
-
-  if (period === "today") {
-    start.setHours(0, 0, 0, 0);
-  }
-
-  if (period === "week") {
-    start.setDate(now.getDate() - 6);
-    start.setHours(0, 0, 0, 0);
-  }
-
-  if (period === "month") {
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-  }
-
-  return { start, end };
-}
-
-function inPeriod(dateString, period) {
-  const date = new Date(dateString);
-  const { start, end } = getRange(period);
-
-  return date >= start && date <= end;
-}
-
-function dateKey(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-
-  return `${y}-${m}-${d}`;
-}
-
 function Card({ children, className = "" }) {
   return (
-    <div className={`rounded-[22px] border border-gray-200 bg-white shadow-sm ${className}`}>
+    <div className={`rounded-[22px] border border-[#EBCDB8] bg-[#FFFDF8] shadow-sm ${className}`}>
       {children}
     </div>
   );
 }
 
-function StatCard({ title, value, caption, icon: Icon, tone = "blue" }) {
+function StatCard({ title, value, caption, icon: Icon, tone = "red" }) {
   const tones = {
-    blue: "bg-sky-50 text-[#0B7FC3]",
+    red: "bg-[#FFF6EA] text-[#C80503]",
     green: "bg-green-50 text-green-600",
-    red: "bg-red-50 text-red-600",
     orange: "bg-orange-50 text-orange-600",
   };
 
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-gray-500">{title}</p>
-          <h3 className="mt-2 text-2xl font-black text-gray-950">{value}</h3>
-          <p className="mt-3 text-xs font-medium leading-relaxed text-gray-500">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-[#7A6258]">{title}</p>
+          <h3 className="mt-2 truncate text-2xl font-black text-[#2A1712]">{value}</h3>
+          <p className="mt-3 text-xs font-semibold leading-relaxed text-[#7A6258]">
             {caption}
           </p>
         </div>
-
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${tones[tone]}`}>
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#EBCDB8] ${tones[tone]}`}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
@@ -229,7 +110,6 @@ function Badge({ children, variant = "gray" }) {
     green: "bg-green-50 text-green-700 ring-green-100",
     orange: "bg-orange-50 text-orange-700 ring-orange-100",
     red: "bg-red-50 text-red-700 ring-red-100",
-    blue: "bg-sky-50 text-[#0B7FC3] ring-sky-100",
     gray: "bg-gray-50 text-gray-600 ring-gray-100",
   };
 
@@ -241,120 +121,88 @@ function Badge({ children, variant = "gray" }) {
 }
 
 function LaporanPage() {
+  const [branchList, setBranchList] = useState([]);
   const [period, setPeriod] = useState("month");
-  const [branch, setBranch] = useState("all");
+  const [branchId, setBranchId] = useState("");
   const [activeTab, setActiveTab] = useState("ringkasan");
+  const [reportData, setReportData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const filteredTransactions = useMemo(() => {
-    return transactions
-      .filter((item) => inPeriod(item.date, period))
-      .filter((item) => branch === "all" || item.branch === branch);
-  }, [period, branch]);
+  useEffect(() => {
+    api.getBranches().then(setBranchList).catch(() => {});
+  }, []);
 
-  const filteredExpenses = useMemo(() => {
-    return expenses
-      .filter((item) => inPeriod(item.date, period))
-      .filter((item) => branch === "all" || item.branch === branch);
-  }, [period, branch]);
-
-  const totalRevenue = filteredTransactions.reduce(
-    (sum, item) => sum + item.total,
-    0
-  );
-
-  const totalExpense = filteredExpenses.reduce(
-    (sum, item) => sum + item.amount,
-    0
-  );
-
-  const grossProfit = totalRevenue - totalExpense;
-
-  const dailyChart = useMemo(() => {
-    const { start, end } = getRange(period);
-    const result = [];
-    const cursor = new Date(start);
-
-    while (cursor <= end) {
-      result.push({
-        key: dateKey(cursor),
-        label: cursor.toLocaleDateString("id-ID", {
-          day: "2-digit",
-          month: "short",
-        }),
-        pendapatan: 0,
-        pengeluaran: 0,
-      });
-
-      cursor.setDate(cursor.getDate() + 1);
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      setErrorMessage("");
+      const params = { period };
+      if (branchId) {
+        params.branch_id = branchId;
+      }
+      const result = await api.getOwnerReports(params);
+      setReportData(result);
+    } catch (error) {
+      console.error("Gagal mengambil laporan:", error);
+      setErrorMessage(error.message || "Gagal memuat data laporan.");
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    filteredTransactions.forEach((item) => {
-      const point = result.find((row) => row.key === dateKey(new Date(item.date)));
-      if (point) point.pendapatan += item.total;
-    });
+  useEffect(() => {
+    fetchData();
+  }, [period, branchId]);
 
-    filteredExpenses.forEach((item) => {
-      const point = result.find((row) => row.key === dateKey(new Date(item.date)));
-      if (point) point.pengeluaran += item.amount;
-    });
+  const summary = reportData?.summary || {};
+  const chart = reportData?.chart || [];
+  const topProducts = reportData?.top_products || [];
+  const transactions = reportData?.transactions || [];
+  const expenses = reportData?.expenses || [];
 
-    return result;
-  }, [filteredTransactions, filteredExpenses, period]);
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#FEF6EC]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#C80503]" />
+      </div>
+    );
+  }
 
-  const branchReport = useMemo(() => {
-    return ["Cabang 1", "Cabang 2"].map((branchName) => {
-      const revenue = filteredTransactions
-        .filter((item) => item.branch === branchName)
-        .reduce((sum, item) => sum + item.total, 0);
-
-      const expense = filteredExpenses
-        .filter((item) => item.branch === branchName)
-        .reduce((sum, item) => sum + item.amount, 0);
-
-      return {
-        branch: branchName,
-        pendapatan: revenue,
-        pengeluaran: expense,
-        laba: revenue - expense,
-      };
-    });
-  }, [filteredTransactions, filteredExpenses]);
-
-  const topProducts = useMemo(() => {
-    const map = {};
-
-    filteredTransactions.forEach((transaction) => {
-      transaction.items.forEach((item) => {
-        if (!map[item.name]) {
-          map[item.name] = {
-            name: item.name,
-            qty: 0,
-          };
-        }
-
-        map[item.name].qty += item.qty;
-      });
-    });
-
-    const result = Object.values(map).sort((a, b) => b.qty - a.qty);
-
-    return result.length > 0 ? result : [{ name: "Belum ada data", qty: 0 }];
-  }, [filteredTransactions]);
+  if (errorMessage) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#FEF6EC] p-6">
+        <div className="max-w-md rounded-[22px] border border-[#EBCDB8] bg-[#FFFDF8] p-8 text-center shadow-sm">
+          <p className="text-sm font-bold text-[#C80503]">{errorMessage}</p>
+          <button
+            type="button"
+            onClick={fetchData}
+            className="mt-4 rounded-xl border border-[#EBCDB8] bg-white px-4 py-2 text-xs font-black text-[#2A1712] hover:bg-[#FFF6EA]"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] px-4 py-5 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#FEF6EC] px-4 py-5 sm:px-6 lg:px-8">
       <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-gray-950 sm:text-3xl">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#C80503]">
+            Laporan Owner
+          </p>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-[#2A1712] sm:text-3xl">
             Laporan
           </h1>
-          <p className="mt-1 text-sm font-medium text-gray-500">
+          <p className="mt-1 text-sm font-semibold text-[#7A6258]">
             Pantau pendapatan, pengeluaran, transaksi, dan performa cabang.
           </p>
         </div>
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="grid grid-cols-3 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
+          <div className="grid grid-cols-3 rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] p-1 shadow-sm">
             {periodOptions.map((item) => (
               <button
                 key={item.id}
@@ -362,8 +210,8 @@ function LaporanPage() {
                 onClick={() => setPeriod(item.id)}
                 className={`rounded-xl px-3 py-2 text-xs font-black transition sm:px-4 ${
                   period === item.id
-                    ? "bg-[#0B7FC3] text-white shadow-sm"
-                    : "text-gray-600 hover:bg-gray-50"
+                    ? "bg-[#C80503] text-white shadow-sm"
+                    : "text-[#7A6258] hover:bg-[#FFF6EA]"
                 }`}
               >
                 {item.label}
@@ -372,28 +220,31 @@ function LaporanPage() {
           </div>
 
           <select
-            value={branch}
-            onChange={(event) => setBranch(event.target.value)}
-            className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 shadow-sm outline-none focus:border-[#0B7FC3]"
+            value={branchId}
+            onChange={(event) => setBranchId(event.target.value)}
+            className="rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]"
           >
-            {branchOptions.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
+            <option value="">Semua Cabang</option>
+            {branchList.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
               </option>
             ))}
           </select>
 
           <button
             type="button"
-            className="flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-700 shadow-sm transition hover:bg-gray-50"
+            onClick={fetchData}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-black text-[#2A1712] shadow-sm transition hover:bg-[#FFF6EA]"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </button>
 
           <button
             type="button"
-            className="flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-700 shadow-sm transition hover:bg-gray-50"
+            onClick={() => alert("Fitur export sedang disiapkan.")}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-black text-[#2A1712] shadow-sm transition hover:bg-[#FFF6EA]"
           >
             <Download className="h-4 w-4" />
             Export
@@ -404,31 +255,28 @@ function LaporanPage() {
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total Pendapatan"
-          value={rupiah(totalRevenue)}
+          value={rupiah(summary.total_revenue)}
           caption="Dari transaksi lunas pada periode terpilih."
           icon={ArrowUpRight}
           tone="green"
         />
-
         <StatCard
           title="Total Pengeluaran"
-          value={rupiah(totalExpense)}
+          value={rupiah(summary.total_expenses)}
           caption="Pengeluaran aktif yang tercatat."
           icon={ArrowDownRight}
           tone="red"
         />
-
         <StatCard
           title="Laba Kotor"
-          value={rupiah(grossProfit)}
+          value={rupiah(summary.gross_profit)}
           caption="Pendapatan dikurangi pengeluaran."
           icon={TrendingUp}
-          tone={grossProfit >= 0 ? "blue" : "red"}
+          tone={(summary.gross_profit ?? 0) >= 0 ? "green" : "red"}
         />
-
         <StatCard
           title="Total Transaksi"
-          value={filteredTransactions.length}
+          value={summary.total_transactions ?? 0}
           caption="Jumlah transaksi berhasil."
           icon={ReceiptText}
           tone="orange"
@@ -444,8 +292,8 @@ function LaporanPage() {
               onClick={() => setActiveTab(item.id)}
               className={`shrink-0 rounded-2xl px-4 py-3 text-sm font-black transition ${
                 activeTab === item.id
-                  ? "bg-[#0B7FC3] text-white shadow-sm"
-                  : "text-gray-600 hover:bg-gray-100"
+                  ? "bg-[#C80503] text-white shadow-sm"
+                  : "text-[#7A6258] hover:bg-[#FFF6EA]"
               }`}
             >
               {item.label}
@@ -459,158 +307,160 @@ function LaporanPage() {
           <Card className="p-5">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-black text-gray-950">
+                <h2 className="text-lg font-black text-[#2A1712]">
                   Pendapatan vs Pengeluaran
                 </h2>
-                <p className="mt-1 text-sm font-medium text-gray-500">
+                <p className="mt-1 text-sm font-medium text-[#7A6258]">
                   Ringkasan harian berdasarkan periode dan cabang terpilih.
                 </p>
               </div>
-
-              <BarChart3 className="h-5 w-5 text-[#0B7FC3]" />
+              <BarChart3 className="h-5 w-5 text-[#C80503]" />
             </div>
 
             <div className="h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dailyChart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <BarChart data={chart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#EBCDB8" />
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 12, fill: "#6B7280", fontWeight: 600 }}
+                    tick={{ fontSize: 12, fill: "#7A6258", fontWeight: 600 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
                     tickFormatter={shortRupiah}
-                    tick={{ fontSize: 12, fill: "#6B7280", fontWeight: 600 }}
+                    tick={{ fontSize: 12, fill: "#7A6258", fontWeight: 600 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip formatter={(value) => rupiah(value)} />
-                  <Bar dataKey="pendapatan" fill="#0B7FC3" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="pengeluaran" fill="#EF4444" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="revenue" fill="#16A34A" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="expenses" fill="#C80503" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </Card>
 
           <Card className="p-5">
-            <h2 className="text-lg font-black text-gray-950">
+            <h2 className="text-lg font-black text-[#2A1712]">
               Produk Terlaris
             </h2>
-            <p className="mt-1 text-sm font-medium text-gray-500">
+            <p className="mt-1 text-sm font-medium text-[#7A6258]">
               Produk dengan jumlah terjual terbanyak.
             </p>
 
             <div className="mt-5 space-y-3">
-              {topProducts.slice(0, 5).map((item, index) => (
+              {topProducts.length > 0 ? topProducts.slice(0, 5).map((item, index) => (
                 <div
-                  key={`${item.name}-${index}`}
-                  className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3"
+                  key={`${item.product_id}-${index}`}
+                  className="flex items-center justify-between rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3"
                 >
-                  <div>
-                    <p className="font-black text-gray-950">{item.name}</p>
-                    <p className="mt-0.5 text-xs font-semibold text-gray-500">
-                      Peringkat #{index + 1}
+                  <div className="min-w-0">
+                    <p className="truncate font-black text-[#2A1712]">{item.product_name}</p>
+                    <p className="mt-0.5 text-xs font-semibold text-[#7A6258]">
+                      {item.product_code} &middot; Peringkat #{index + 1}
                     </p>
                   </div>
-
-                  <Badge variant="blue">{item.qty} item</Badge>
+                  <Badge variant="orange">{item.quantity_sold} item</Badge>
                 </div>
-              ))}
+              )) : (
+                <p className="p-4 text-center text-sm font-semibold text-[#7A6258]">
+                  Belum ada data produk terjual.
+                </p>
+              )}
             </div>
           </Card>
 
           <Card className="p-5 xl:col-span-2">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-black text-gray-950">
+                <h2 className="text-lg font-black text-[#2A1712]">
                   Perbandingan Cabang
                 </h2>
-                <p className="mt-1 text-sm font-medium text-gray-500">
+                <p className="mt-1 text-sm font-medium text-[#7A6258]">
                   Grafik pendapatan, pengeluaran, dan laba antar cabang.
                 </p>
               </div>
-
-              <PackageCheck className="h-5 w-5 text-[#0B7FC3]" />
+              <PackageCheck className="h-5 w-5 text-[#C80503]" />
             </div>
 
             <div className="mb-5 h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={branchReport} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <BarChart data={reportData?.branch_summary || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#EBCDB8" />
                   <XAxis
-                    dataKey="branch"
-                    tick={{ fontSize: 12, fill: "#6B7280", fontWeight: 700 }}
+                    dataKey="branch_name"
+                    tick={{ fontSize: 12, fill: "#7A6258", fontWeight: 700 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
                     tickFormatter={shortRupiah}
-                    tick={{ fontSize: 12, fill: "#6B7280", fontWeight: 600 }}
+                    tick={{ fontSize: 12, fill: "#7A6258", fontWeight: 600 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip formatter={(value) => rupiah(value)} />
-                  <Bar dataKey="pendapatan" fill="#0B7FC3" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="pengeluaran" fill="#EF4444" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="laba" fill="#22C55E" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="total_revenue" fill="#16A34A" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="total_expenses" fill="#C80503" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="gross_profit" fill="#F97316" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              {branchReport.map((item) => (
+              {(reportData?.branch_summary || []).length > 0 ? reportData.branch_summary.map((item) => (
                 <div
-                  key={item.branch}
-                  className="rounded-[20px] border border-gray-200 bg-gray-50 p-4"
+                  key={item.branch_id}
+                  className="rounded-[20px] border border-[#EBCDB8] bg-[#FFFDF8] p-4"
                 >
                   <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-base font-black text-gray-950">
-                      {item.branch}
+                    <h3 className="text-base font-black text-[#2A1712]">
+                      {item.branch_name}
                     </h3>
-
-                    <Badge variant={item.laba >= 0 ? "green" : "red"}>
-                      {item.laba >= 0 ? "Untung" : "Minus"}
+                    <Badge variant={(item.gross_profit ?? 0) >= 0 ? "green" : "red"}>
+                      {(item.gross_profit ?? 0) >= 0 ? "Untung" : "Minus"}
                     </Badge>
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex justify-between gap-3">
-                      <span className="text-sm font-semibold text-gray-500">
+                      <span className="text-sm font-semibold text-[#7A6258]">
                         Pendapatan
                       </span>
-                      <span className="text-sm font-black text-gray-950">
-                        {rupiah(item.pendapatan)}
+                      <span className="text-sm font-black text-[#2A1712]">
+                        {rupiah(item.total_revenue)}
                       </span>
                     </div>
-
                     <div className="flex justify-between gap-3">
-                      <span className="text-sm font-semibold text-gray-500">
+                      <span className="text-sm font-semibold text-[#7A6258]">
                         Pengeluaran
                       </span>
-                      <span className="text-sm font-black text-red-600">
-                        {rupiah(item.pengeluaran)}
+                      <span className="text-sm font-black text-[#C80503]">
+                        {rupiah(item.total_expenses)}
                       </span>
                     </div>
-
-                    <div className="border-t border-gray-200 pt-3">
+                    <div className="border-t border-[#EBCDB8] pt-3">
                       <div className="flex justify-between gap-3">
-                        <span className="text-sm font-semibold text-gray-500">
+                        <span className="text-sm font-semibold text-[#7A6258]">
                           Laba Kotor
                         </span>
                         <span
                           className={`text-sm font-black ${
-                            item.laba >= 0 ? "text-green-600" : "text-red-600"
+                            (item.gross_profit ?? 0) >= 0 ? "text-green-600" : "text-[#C80503]"
                           }`}
                         >
-                          {rupiah(item.laba)}
+                          {rupiah(item.gross_profit)}
                         </span>
                       </div>
                     </div>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <p className="col-span-2 p-4 text-center text-sm font-semibold text-[#7A6258]">
+                  Belum ada data cabang.
+                </p>
+              )}
             </div>
           </Card>
         </div>
@@ -620,18 +470,17 @@ function LaporanPage() {
         <Card className="p-5">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-black text-gray-950">Transaksi</h2>
-              <p className="mt-1 text-sm font-medium text-gray-500">
+              <h2 className="text-lg font-black text-[#2A1712]">Transaksi</h2>
+              <p className="mt-1 text-sm font-medium text-[#7A6258]">
                 Daftar transaksi lunas pada periode terpilih.
               </p>
             </div>
-
-            <FileText className="h-5 w-5 text-[#0B7FC3]" />
+            <FileText className="h-5 w-5 text-[#C80503]" />
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-gray-200">
+          <div className="overflow-x-auto rounded-2xl border border-[#EBCDB8]">
             <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500">
+              <thead className="bg-[#FFF6EA] text-xs font-black uppercase text-[#7A6258]">
                 <tr>
                   <th className="px-4 py-3">Invoice</th>
                   <th className="px-4 py-3">Tanggal</th>
@@ -643,36 +492,37 @@ function LaporanPage() {
                   <th className="px-4 py-3 text-right">Total</th>
                 </tr>
               </thead>
-
-              <tbody className="divide-y divide-gray-100">
-                {filteredTransactions.map((item) => (
+              <tbody className="divide-y divide-[#EBCDB8]">
+                {transactions.length > 0 ? transactions.map((item) => (
                   <tr key={item.id} className="bg-white">
-                    <td className="px-4 py-3 font-black text-gray-950">
-                      {item.invoice}
+                    <td className="px-4 py-3 font-black text-[#2A1712]">
+                      {item.invoice_number}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-600">
-                      {formatDate(item.date)}
+                    <td className="px-4 py-3 font-semibold text-[#7A6258]">
+                      {formatDate(item.created_at)}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-600">
-                      {formatTime(item.date)}
+                    <td className="px-4 py-3 font-semibold text-[#7A6258]">
+                      {formatTime(item.created_at)}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-600">
-                      {item.branch}
+                    <td className="px-4 py-3 font-semibold text-[#7A6258]">
+                      {item.branch_name}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-600">
-                      {item.cashier}
+                    <td className="px-4 py-3 font-semibold text-[#7A6258]">
+                      {item.cashier_name}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-600">
-                      {item.payment}
+                    <td className="px-4 py-3 font-semibold text-[#7A6258]">
+                      {item.payment_method}
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant="green">{item.status}</Badge>
                     </td>
-                    <td className="px-4 py-3 text-right font-black text-gray-950">
-                      {rupiah(item.total)}
+                    <td className="px-4 py-3 text-right font-black text-[#2A1712]">
+                      {rupiah(item.total_amount)}
                     </td>
                   </tr>
-                ))}
+                )) : (
+                  <tr><td colSpan={8} className="p-4 text-center text-sm font-semibold text-[#7A6258]">Belum ada transaksi.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -683,18 +533,17 @@ function LaporanPage() {
         <Card className="p-5">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-black text-gray-950">Pengeluaran</h2>
-              <p className="mt-1 text-sm font-medium text-gray-500">
+              <h2 className="text-lg font-black text-[#2A1712]">Pengeluaran</h2>
+              <p className="mt-1 text-sm font-medium text-[#7A6258]">
                 Biaya operasional yang tercatat pada periode terpilih.
               </p>
             </div>
-
-            <WalletCards className="h-5 w-5 text-red-500" />
+            <WalletCards className="h-5 w-5 text-[#C80503]" />
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-gray-200">
+          <div className="overflow-x-auto rounded-2xl border border-[#EBCDB8]">
             <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500">
+              <thead className="bg-[#FFF6EA] text-xs font-black uppercase text-[#7A6258]">
                 <tr>
                   <th className="px-4 py-3">Tanggal</th>
                   <th className="px-4 py-3">Kategori</th>
@@ -703,27 +552,28 @@ function LaporanPage() {
                   <th className="px-4 py-3 text-right">Nominal</th>
                 </tr>
               </thead>
-
-              <tbody className="divide-y divide-gray-100">
-                {filteredExpenses.map((item) => (
+              <tbody className="divide-y divide-[#EBCDB8]">
+                {expenses.length > 0 ? expenses.map((item) => (
                   <tr key={item.id} className="bg-white">
-                    <td className="px-4 py-3 font-semibold text-gray-600">
-                      {formatDate(item.date)}
+                    <td className="px-4 py-3 font-semibold text-[#7A6258]">
+                      {formatDate(item.created_at)}
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant="orange">{item.category}</Badge>
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-600">
+                    <td className="px-4 py-3 font-semibold text-[#7A6258]">
                       {item.description}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-600">
-                      {item.branch}
+                    <td className="px-4 py-3 font-semibold text-[#7A6258]">
+                      {item.branch_name}
                     </td>
-                    <td className="px-4 py-3 text-right font-black text-red-600">
+                    <td className="px-4 py-3 text-right font-black text-[#C80503]">
                       {rupiah(item.amount)}
                     </td>
                   </tr>
-                ))}
+                )) : (
+                  <tr><td colSpan={5} className="p-4 text-center text-sm font-semibold text-[#7A6258]">Belum ada pengeluaran.</td></tr>
+                )}
               </tbody>
             </table>
           </div>

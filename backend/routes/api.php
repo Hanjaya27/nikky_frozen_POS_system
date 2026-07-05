@@ -7,10 +7,21 @@ use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ShiftController;
 use App\Http\Controllers\Api\LoginActivityController;
+use App\Http\Controllers\Api\OwnerLoginActivityController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\RolePermissionController;
+use App\Http\Controllers\Api\OwnerRolePermissionController;
 use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\OwnerSettingController;
 use App\Http\Controllers\Api\StockHistoryController;
+use App\Http\Controllers\Api\AdminDashboardController;
+use App\Http\Controllers\Api\OwnerDashboardController;
+use App\Http\Controllers\Api\OwnerExpenseController;
+use App\Http\Controllers\Api\OwnerReportController;
+use App\Http\Controllers\Api\OwnerStockController;
+use App\Http\Controllers\Api\OwnerUserController;
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -46,6 +57,12 @@ Route::get('/branches', function () {
 });
 
 Route::get('/stock-histories', [StockHistoryController::class, 'index']);
+Route::get('/admin/dashboard', [AdminDashboardController::class, 'index']);
+Route::get('/owner/dashboard', [OwnerDashboardController::class, 'index']);
+Route::get('/owner/reports', [OwnerReportController::class, 'index']);
+Route::get('/owner/stocks', [OwnerStockController::class, 'index']);
+Route::get('/owner/expenses', [OwnerExpenseController::class, 'index']);
+Route::get('/owner/users', [OwnerUserController::class, 'index']);
 
 /*
 |--------------------------------------------------------------------------
@@ -85,6 +102,9 @@ Route::delete('/shifts/{id}', [ShiftController::class, 'destroy']);
 Route::get('/login-activities', [LoginActivityController::class, 'index']);
 Route::put('/login-activities/{id}/force-logout', [LoginActivityController::class, 'forceLogout']);
 Route::delete('/login-activities/{id}', [LoginActivityController::class, 'destroy']);
+Route::get('/owner/login-activities', [OwnerLoginActivityController::class, 'index']);
+Route::post('/owner/login-activities/{id}/force-logout', [OwnerLoginActivityController::class, 'forceLogout']);
+Route::delete('/owner/login-activities/{id}', [OwnerLoginActivityController::class, 'destroy']);
 
 Route::get('/users', [UserController::class, 'index']);
 Route::get('/users/{id}', [UserController::class, 'show']);
@@ -98,11 +118,15 @@ Route::delete('/users/{id}', [UserController::class, 'destroy']);
 |--------------------------------------------------------------------------
 */
 
-Route::get('/permissions', [RolePermissionController::class, 'index']);
-Route::put('/permissions', [RolePermissionController::class, 'updateAll']);
-Route::put('/permissions/{permissionId}', [RolePermissionController::class, 'updateSingle']);
-Route::post('/permissions/reset', [RolePermissionController::class, 'reset']);
+Route::get('/owner/role-permissions', [OwnerRolePermissionController::class, 'index']);
+Route::patch('/owner/role-permissions/{permissionId}', [OwnerRolePermissionController::class, 'update']);
+Route::post('/owner/role-permissions/enable-all-admin', [OwnerRolePermissionController::class, 'enableAllAdmin']);
+Route::post('/owner/role-permissions/enable-all-cashier', [OwnerRolePermissionController::class, 'enableAllCashier']);
+Route::post('/owner/role-permissions/safe-defaults', [OwnerRolePermissionController::class, 'safeDefaults']);
+Route::post('/owner/role-permissions/reset', [OwnerRolePermissionController::class, 'reset']);
 
 Route::get('/settings', [SettingController::class, 'index']);
 Route::put('/settings', [SettingController::class, 'update']);
 Route::post('/settings/reset', [SettingController::class, 'reset']);
+Route::get('/owner/settings', [OwnerSettingController::class, 'index']);
+Route::put('/owner/settings', [OwnerSettingController::class, 'update']);

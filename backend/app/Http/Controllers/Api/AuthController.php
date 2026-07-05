@@ -52,7 +52,7 @@ class AuthController extends Controller
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
             'device' => $this->detectDevice($request->userAgent()),
-            'note' => 'Login berhasil',
+            'note' => 'Login Berhasil',
         ]);
 
         return response()->json([
@@ -98,7 +98,7 @@ class AuthController extends Controller
             $activity->update([
                 'logout_at' => now(),
                 'status' => 'Logout',
-                'note' => 'Logout berhasil',
+                'note' => 'Logout Berhasil',
             ]);
         }
 
