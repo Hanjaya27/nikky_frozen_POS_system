@@ -128,9 +128,11 @@ function LaporanPage() {
   const [reportData, setReportData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
 
   useEffect(() => {
-    api.getBranches().then(setBranchList).catch(() => {});
+    api.getBranchesCached().then(setBranchList).catch(() => {});
   }, []);
 
   const fetchData = async () => {
@@ -150,6 +152,33 @@ function LaporanPage() {
       setIsLoading(false);
     }
   };
+
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      setExportError("");
+
+      const { blob, filename } = await api.exportOwnerReports({
+        period,
+        branch_id: branchId || undefined,
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename || "laporan-owner.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Gagal export laporan:", error);
+      setExportError(error.message || "Gagal export laporan.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
 
   useEffect(() => {
     fetchData();
@@ -193,9 +222,7 @@ function LaporanPage() {
           <p className="text-xs font-black uppercase tracking-[0.18em] text-[#C80503]">
             Laporan Owner
           </p>
-          <h1 className="mt-1 text-2xl font-black tracking-tight text-[#2A1712] sm:text-3xl">
-            Laporan
-          </h1>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-[#2A1712] sm:text-3xl">Laporan</h1>
           <p className="mt-1 text-sm font-semibold text-[#7A6258]">
             Pantau pendapatan, pengeluaran, transaksi, dan performa cabang.
           </p>
@@ -243,14 +270,21 @@ function LaporanPage() {
 
           <button
             type="button"
-            onClick={() => alert("Fitur export sedang disiapkan.")}
-            className="flex items-center justify-center gap-2 rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-black text-[#2A1712] shadow-sm transition hover:bg-[#FFF6EA]"
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-[#EBCDB8] bg-[#FFFDF8] px-4 py-3 text-sm font-black text-[#C80503] shadow-sm transition hover:bg-[#FFF6EA] hover:border-[#C80503] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Download className="h-4 w-4" />
-            Export
+            <Download className={`h-4 w-4 ${exporting ? "animate-bounce" : ""}`} />
+            {exporting ? "Mengekspor..." : "Export"}
           </button>
         </div>
       </div>
+
+      {exportError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {exportError}
+        </div>
+      )}
 
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -584,3 +618,4 @@ function LaporanPage() {
 }
 
 export default LaporanPage;
+

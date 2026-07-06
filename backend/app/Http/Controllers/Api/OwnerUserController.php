@@ -74,7 +74,7 @@ class OwnerUserController extends Controller
                     'shift_default' => $u->shift_name ?? $u->shift_default,
                     'phone' => $u->phone,
                     'last_login_at' => $u->last_login_at ? $u->last_login_at->format('Y-m-d H:i:s') : null,
-                    'status' => $u->status ?? ($u->is_active ? 'active' : 'inactive'),
+                    'status' => in_array(strtolower(trim((string) ($u->status ?? ''))), ['active','aktif','1','true']) ? 'active' : 'inactive',
                     'created_at' => $u->created_at->format('Y-m-d H:i:s'),
                 ];
             });

@@ -34,6 +34,11 @@ const defaultPermissions = [
   { id: "pengaturan", kasirAccess: false },
 ];
 
+function normalizeRole(role) {
+  const normalized = String(role || "").toLowerCase();
+  return normalized === "kasir" ? "cashier" : normalized;
+}
+
 function getCurrentUser() {
   const savedUser = localStorage.getItem("nikky_user");
 
@@ -86,7 +91,7 @@ function GuestRoute({ children }) {
     return <Navigate to="/admin/dashboard" replace />;
   }
 
-  if (currentUser?.role === "kasir") {
+  if (normalizeRole(currentUser?.role) === "cashier") {
     return <Navigate to="/" replace />;
   }
 
@@ -110,7 +115,7 @@ function OwnerOnlyRoute({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (currentUser.role !== "owner") {
+  if (normalizeRole(currentUser.role) !== "owner") {
     return <Navigate to="/" replace />;
   }
 
@@ -124,8 +129,8 @@ function AdminOnlyRoute({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (currentUser.role !== "admin") {
-    if (currentUser.role === "owner") {
+  if (normalizeRole(currentUser.role) !== "admin") {
+    if (normalizeRole(currentUser.role) === "owner") {
       return <Navigate to="/owner/dashboard" replace />;
     }
 
@@ -142,11 +147,11 @@ function PermissionRoute({ permissionId, children }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (currentUser.role === "owner" || currentUser.role === "admin") {
+  if (normalizeRole(currentUser.role) === "owner" || normalizeRole(currentUser.role) === "admin") {
     return children;
   }
 
-  if (currentUser.role === "kasir") {
+  if (normalizeRole(currentUser.role) === "cashier") {
     const allowed = hasKasirPermission(permissionId);
 
     if (!allowed) {
@@ -166,11 +171,11 @@ function RoleRedirect() {
     return <Navigate to="/login" replace />;
   }
 
-  if (currentUser.role === "owner") {
+  if (normalizeRole(currentUser.role) === "owner") {
     return <Navigate to="/owner/dashboard" replace />;
   }
 
-  if (currentUser.role === "admin") {
+  if (normalizeRole(currentUser.role) === "admin") {
     return <Navigate to="/admin/dashboard" replace />;
   }
 

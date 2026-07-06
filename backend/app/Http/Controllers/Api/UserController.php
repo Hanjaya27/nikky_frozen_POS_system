@@ -38,6 +38,7 @@ class UserController extends Controller
             });
         }
 
+        $perPage = $request->query('per_page', 10);
         $users = $query->get();
 
         return response()->json([
@@ -67,22 +68,27 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
+        $request->merge([
+            'role' => $this->normalizeRole($request->input('role')),
+            'status' => $this->normalizeStatus($request->input('status')),
+        ]);
+
         $validatedData = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'username' => ['required', 'string', 'max:100', 'unique:users,username'],
             'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6'],
-            'role' => ['required', Rule::in(['owner', 'kasir'])],
+            'role' => ['required', Rule::in(['owner', 'admin', 'cashier'])],
             'branch_id' => ['nullable', 'exists:branches,id'],
             'shift_name' => ['nullable', 'string', 'max:100'],
             'phone' => ['nullable', 'string', 'max:30'],
-            'status' => ['required', Rule::in(['Aktif', 'Nonaktif'])],
+            'status' => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
-        if ($validatedData['role'] === 'kasir' && empty($validatedData['branch_id'])) {
+        if (in_array($validatedData['role'], ['admin', 'cashier'], true) && empty($validatedData['branch_id'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'Cabang wajib dipilih untuk user kasir.',
+                'message' => 'Cabang wajib dipilih untuk user admin/kasir.',
             ], 422);
         }
 
@@ -103,6 +109,11 @@ class UserController extends Controller
 
     public function update(Request $request, $id)
     {
+        $request->merge([
+            'role' => $this->normalizeRole($request->input('role')),
+            'status' => $this->normalizeStatus($request->input('status')),
+        ]);
+
         $user = User::find($id);
 
         if (!$user) {
@@ -127,17 +138,17 @@ class UserController extends Controller
                 Rule::unique('users', 'email')->ignore($user->id),
             ],
             'password' => ['nullable', 'string', 'min:6'],
-            'role' => ['required', Rule::in(['owner', 'kasir'])],
+            'role' => ['required', Rule::in(['owner', 'admin', 'cashier'])],
             'branch_id' => ['nullable', 'exists:branches,id'],
             'shift_name' => ['nullable', 'string', 'max:100'],
             'phone' => ['nullable', 'string', 'max:30'],
-            'status' => ['required', Rule::in(['Aktif', 'Nonaktif'])],
+            'status' => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
-        if ($validatedData['role'] === 'kasir' && empty($validatedData['branch_id'])) {
+        if (in_array($validatedData['role'], ['admin', 'cashier'], true) && empty($validatedData['branch_id'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'Cabang wajib dipilih untuk user kasir.',
+                'message' => 'Cabang wajib dipilih untuk user admin/kasir.',
             ], 422);
         }
 
@@ -184,5 +195,24 @@ class UserController extends Controller
             'success' => true,
             'message' => 'User berhasil dihapus.',
         ]);
+    }
+
+    private function normalizeRole($role): ?string
+    {
+        return match ($role) {
+            'Owner', 'owner' => 'owner',
+            'Admin', 'admin' => 'admin',
+            'Kasir', 'kasir', 'Cashier', 'cashier' => 'cashier',
+            default => $role,
+        };
+    }
+
+    private function normalizeStatus($status): ?string
+    {
+        return match ($status) {
+            'Aktif', 'aktif', 'active' => 'active',
+            'Nonaktif', 'nonaktif', 'inactive' => 'inactive',
+            default => $status,
+        };
     }
 }

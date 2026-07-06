@@ -89,6 +89,7 @@ function getStatusBadge(status) {
 function DataUserPage() {
   const [data, setData] = useState(null);
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [debouncedSearchKeyword, setDebouncedSearchKeyword] = useState("");
   const [selectedBranch, setSelectedBranch] = useState("");
   const [selectedRole, setSelectedRole] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
@@ -96,28 +97,40 @@ function DataUserPage() {
   const [editingUser, setEditingUser] = useState(null);
   const [formData, setFormData] = useState({
     name: "", username: "", password: "", role: "cashier",
-    branch_id: "", shift_name: "Shift Pagi", phone: "", status: "Aktif",
+    branch_id: "", shift_name: "Shift Pagi", phone: "", status: "active",
   });
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const fetchUsers = async () => {
     try {
       setIsLoading(true); setErrorMessage("");
-      const params = { branch_id: selectedBranch, role: selectedRole, status: selectedStatus, search: searchKeyword };
+      const params = { branch_id: selectedBranch, role: selectedRole, status: selectedStatus, search: debouncedSearchKeyword };
       const result = await api.getOwnerUsers(params);
       setData(result);
     } catch (e) { setErrorMessage(e.message || "Gagal memuat data user."); setData(null); } finally { setIsLoading(false); }
   };
 
-  useEffect(() => { fetchUsers(); }, [selectedBranch, selectedRole, selectedStatus, searchKeyword]);
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedSearchKeyword(searchKeyword), 400);
+    return () => clearTimeout(timeoutId);
+  }, [searchKeyword]);
+
+  useEffect(() => { fetchUsers(); }, [selectedBranch, selectedRole, selectedStatus, debouncedSearchKeyword]);
 
   const users = data?.users || [];
   const branches = data?.branches || [];
   const roles = data?.roles || [];
   const summary = data?.summary || {};
+  const roleOptions = [
+    { value: "owner", label: "Owner" },
+    { value: "admin", label: "Admin" },
+    { value: "cashier", label: "Kasir" },
+  ];
+  const shifts = ["Shift Pagi", "Shift Siang", "Shift Sore"];
 
   const filteredUsers = useMemo(() => users.filter(u => {
     const kw = searchKeyword.toLowerCase();
@@ -125,18 +138,18 @@ function DataUserPage() {
   }), [users, searchKeyword]);
 
   const showSuccess = (msg) => { setSuccessMessage(msg); setTimeout(() => setSuccessMessage(""), 2500); };
-  const resetForm = () => { setFormData({ name: "", username: "", password: "", role: "cashier", branch_id: "", shift_name: "Shift Pagi", phone: "", status: "Aktif" }); setEditingUser(null); };
+  const resetForm = () => { setFormData({ name: "", username: "", password: "", role: "cashier", branch_id: "", shift_name: "Shift Pagi", phone: "", status: "active" }); setEditingUser(null); setFormError(""); };
   const openAdd = () => { resetForm(); setShowModal(true); };
   const closeModal = () => { resetForm(); setShowModal(false); };
 
-  const handleChange = (e) => { const { name, value } = e.target; setFormData(prev => ({ ...prev, [name]: value })); };
+  const handleChange = (e) => { const { name, value } = e.target; setFormError(""); setFormData(prev => ({ ...prev, [name]: value })); };
 
   const validate = () => {
-    if (!formData.name.trim()) { alert("Nama wajib diisi."); return false; }
-    if (!formData.username.trim()) { alert("Username wajib diisi."); return false; }
-    if (!editingUser && !formData.password.trim()) { alert("Password wajib diisi."); return false; }
-    if (formData.password && formData.password.length < 6) { alert("Password minimal 6 karakter."); return false; }
-    if ((formData.role === "admin" || formData.role === "cashier") && !formData.branch_id) { alert("Cabang wajib dipilih."); return false; }
+    if (!formData.name.trim()) { setFormError("Nama wajib diisi."); return false; }
+    if (!formData.username.trim()) { setFormError("Username wajib diisi."); return false; }
+    if (!editingUser && !formData.password.trim()) { setFormError("Password wajib diisi."); return false; }
+    if (formData.password && formData.password.length < 6) { setFormError("Password minimal 6 karakter."); return false; }
+    if ((formData.role === "admin" || formData.role === "cashier") && !formData.branch_id) { setFormError("Cabang wajib dipilih untuk Admin/Kasir."); return false; }
     return true;
   };
 
@@ -148,7 +161,7 @@ function DataUserPage() {
       branch_id: formData.role === "owner" ? null : Number(formData.branch_id),
       shift_name: formData.shift_name,
       phone: formData.phone,
-      status: formData.status === "Aktif" ? "active" : "inactive",
+      status: formData.status,
     };
     if (formData.password.trim()) payload.password = formData.password;
     return payload;
@@ -158,31 +171,42 @@ function DataUserPage() {
     e.preventDefault();
     if (!validate()) return;
     try {
-      setIsSubmitting(true); setErrorMessage("");
+      setIsSubmitting(true); setErrorMessage(""); setFormError("");
       const payload = getPayload();
       if (editingUser) { await updateUser(editingUser.id, payload); showSuccess("User berhasil diperbarui."); }
       else { await createUser(payload); showSuccess("User berhasil ditambahkan."); }
       closeModal(); fetchUsers();
-    } catch (err) { alert(err.message || "Gagal menyimpan user."); } finally { setIsSubmitting(false); }
+    } catch (err) { const message = err.message === "The selected role is invalid." ? "Role yang dipilih tidak valid. Silakan pilih Owner, Admin, atau Kasir." : (err.message || "Gagal menyimpan user."); setFormError(message); } finally { setIsSubmitting(false); }
   };
 
   const handleDelete = async (user) => {
-    if (!confirm(`Hapus ${user.name}?`)) return;
-    try { await deleteUser(user.id); showSuccess("User berhasil dihapus."); fetchUsers(); } catch (err) { alert(err.message || "Gagal menghapus user."); }
+    try { await deleteUser(user.id); showSuccess("User berhasil dihapus."); fetchUsers(); } catch (err) { setErrorMessage(err.message || "Gagal menghapus user."); }
   };
 
   const handleToggleStatus = async (user) => {
     const newStatus = user.status === "active" ? "inactive" : "active";
-    if (!confirm(`Ubah status ${user.name} menjadi ${newStatus}?`)) return;
     try {
-      await updateUser(user.id, { ...user, status: newStatus });
-      showSuccess(`Status ${user.name} menjadi ${newStatus}.`);
+      await api.updateUser(user.id, {
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        branch_id: user.role === "owner" ? null : user.branch_id,
+        shift_name: user.shift_default,
+        phone: user.phone,
+        status: newStatus,
+      });
+      showSuccess(
+        `Status ${user.name} menjadi ${newStatus === "active" ? "Aktif" : "Nonaktif"}.`
+      );
       fetchUsers();
-    } catch (err) { alert(err.message || "Gagal mengubah status."); }
+    } catch (err) {
+      setErrorMessage(err.message || "Gagal mengubah status.");
+    }
   };
 
   const exportCSV = () => {
-    if (filteredUsers.length === 0) { alert("Tidak ada data user untuk diexport."); return; }
+    if (filteredUsers.length === 0) { setErrorMessage("Tidak ada data user untuk diexport."); return; }
     const headers = ["Nama", "Username", "Role", "Cabang", "Shift", "Telepon", "Login Terakhir", "Status", "Dibuat"];
     const rows = filteredUsers.map((u) => [u.name, u.username, u.role_label, u.branch_name || "-", u.shift_default || "-", u.phone, formatDateTime(u.last_login_at), u.status === "active" ? "Aktif" : "Nonaktif", formatDateTime(u.created_at)]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c || "-"}"`).join(",")).join("\n");
@@ -295,6 +319,7 @@ function DataUserPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-2xl rounded-[24px] bg-[#FFFDF8] p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between"><div><h3 className="text-lg font-black text-[#2A1712]">{editingUser ? "Edit User" : "Tambah User"}</h3><p className="text-sm text-[#7A6258]">Data user akan disimpan ke backend.</p></div><button onClick={closeModal} className="rounded-xl bg-[#FFF6EA] px-3 py-2 text-sm font-bold text-[#2A1712]">X</button></div>
+            {formError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{formError}</div>}
             <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div><label className="mb-1 block text-xs font-bold text-[#2A1712]">Nama</label><input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full rounded-2xl border border-[#EBCDB8] bg-white px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]" /></div>
               <div><label className="mb-1 block text-xs font-bold text-[#2A1712]">Username</label><input type="text" name="username" value={formData.username} onChange={handleChange} className="w-full rounded-2xl border border-[#EBCDB8] bg-white px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]" /></div>
@@ -303,7 +328,7 @@ function DataUserPage() {
               <div><label className="mb-1 block text-xs font-bold text-[#2A1712]">Cabang</label><select name="branch_id" value={formData.branch_id} onChange={handleChange} disabled={formData.role === "owner" || (editingUser && editingUser.role === "owner")} className="w-full rounded-2xl border border-[#EBCDB8] bg-white px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503] disabled:opacity-50"><option value="">Pilih Cabang</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
               <div><label className="mb-1 block text-xs font-bold text-[#2A1712]">No Telepon</label><input type="text" name="phone" value={formData.phone} onChange={handleChange} className="w-full rounded-2xl border border-[#EBCDB8] bg-white px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]" /></div>
               {formData.role === "cashier" && <div><label className="mb-1 block text-xs font-bold text-[#2A1712]">Shift Default</label><select name="shift_name" value={formData.shift_name} onChange={handleChange} className="w-full rounded-2xl border border-[#EBCDB8] bg-white px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]">{shifts.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>}
-              <div><label className="mb-1 block text-xs font-bold text-[#2A1712]">Status</label><select name="status" value={formData.status} onChange={handleChange} className="w-full rounded-2xl border border-[#EBCDB8] bg-white px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]"><option value="Aktif">Aktif</option><option value="Nonaktif">Nonaktif</option></select></div>
+              <div><label className="mb-1 block text-xs font-bold text-[#2A1712]">Status</label><select name="status" value={formData.status} onChange={handleChange} className="w-full rounded-2xl border border-[#EBCDB8] bg-white px-4 py-3 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]"><option value="active">Aktif</option><option value="inactive">Nonaktif</option></select></div>
               <div className="col-span-2 flex justify-end gap-3 pt-3"><button type="button" onClick={closeModal} className="rounded-2xl border border-[#EBCDB8] bg-white px-5 py-3 text-sm font-bold text-[#2A1712]">Batal</button><button type="submit" disabled={isSubmitting} className={`rounded-2xl px-5 py-3 text-sm font-bold text-white ${isSubmitting ? "bg-gray-400" : "bg-[#C80503] hover:bg-[#A80000]"}`}>{isSubmitting ? "Menyimpan..." : editingUser ? "Simpan Perubahan" : "Tambah User"}</button></div>
             </form>
           </div>

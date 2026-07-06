@@ -37,7 +37,7 @@ function AdminMutasiPage() {
 
   const fetchBranches = async () => {
     try {
-      const res = await api.getBranches();
+      const res = await api.getBranchesCached();
       if (res && Array.isArray(res)) {
           setBranches(res.filter(b => b.id !== currentUser?.branch_id));
       }
@@ -263,7 +263,7 @@ function AdminMutasiPage() {
               <div className="flex flex-wrap gap-4 p-4 bg-white rounded-xl border border-[#EBCDB8] shrink-0 mb-4">
                 <label className="flex items-center gap-2 text-sm font-bold text-[#2A1712] cursor-pointer">
                   <input type="radio" value="restock" checked={batchType === "restock"} onChange={(e) => setBatchType(e.target.value)} className="accent-[#C80503] w-4 h-4" />
-                  Restock Stok
+                  Restock
                 </label>
                 <label className="flex items-center gap-2 text-sm font-bold text-[#2A1712] cursor-pointer">
                   <input type="radio" value="transfer" checked={batchType === "transfer"} onChange={(e) => setBatchType(e.target.value)} className="accent-[#C80503] w-4 h-4" />

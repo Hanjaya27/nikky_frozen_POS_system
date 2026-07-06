@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
@@ -20,8 +20,6 @@ use App\Http\Controllers\Api\OwnerExpenseController;
 use App\Http\Controllers\Api\OwnerReportController;
 use App\Http\Controllers\Api\OwnerStockController;
 use App\Http\Controllers\Api\OwnerUserController;
-
-
 
 /*
 |--------------------------------------------------------------------------
@@ -60,6 +58,7 @@ Route::get('/stock-histories', [StockHistoryController::class, 'index']);
 Route::get('/admin/dashboard', [AdminDashboardController::class, 'index']);
 Route::get('/owner/dashboard', [OwnerDashboardController::class, 'index']);
 Route::get('/owner/reports', [OwnerReportController::class, 'index']);
+Route::get('/owner/reports/export', [OwnerReportController::class, 'export']);
 Route::get('/owner/stocks', [OwnerStockController::class, 'index']);
 Route::get('/owner/expenses', [OwnerExpenseController::class, 'index']);
 Route::get('/owner/users', [OwnerUserController::class, 'index']);
@@ -92,6 +91,7 @@ Route::delete('/expenses/{id}', [ExpenseController::class, 'destroy']);
 */
 
 Route::get('/shifts', [ShiftController::class, 'index']);
+Route::get('/shifts/active', [ShiftController::class, 'active']);
 Route::get('/shifts/current', [ShiftController::class, 'current']);
 Route::get('/shifts/{id}', [ShiftController::class, 'show']);
 Route::post('/shifts/open', [ShiftController::class, 'open']);

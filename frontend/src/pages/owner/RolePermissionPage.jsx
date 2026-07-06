@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import PageHeader from "../../components/PageHeader";
 import {
@@ -21,6 +21,7 @@ function RolePermissionPage() {
     cashier_menu_count: 0,
   });
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [debouncedSearchKeyword, setDebouncedSearchKeyword] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -50,9 +51,23 @@ function RolePermissionPage() {
     }
   };
 
+  const isFirstRender = useRef(true);
+
   useEffect(() => {
-    fetchPermissions({ search: searchKeyword });
+    if (isFirstRender.current) { isFirstRender.current = false; } else { return; }
+    
+    fetchPermissions({ search: debouncedSearchKeyword });
   }, []);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedSearchKeyword(searchKeyword), 400);
+    return () => clearTimeout(timeoutId);
+  }, [searchKeyword]);
+
+  useEffect(() => {
+    if (isFirstRender.current) return;
+    fetchPermissions({ search: debouncedSearchKeyword });
+  }, [debouncedSearchKeyword]);
 
   const filteredPermissions = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
@@ -114,14 +129,12 @@ function RolePermissionPage() {
   };
 
   const handleRefresh = async () => {
-    const result = await fetchPermissions({ search: searchKeyword });
+    const result = await fetchPermissions({ search: debouncedSearchKeyword });
     if (result) showSuccess("Data permission berhasil diperbarui dari backend.");
   };
 
-  const handleSearch = async (event) => {
-    const value = event.target.value;
-    setSearchKeyword(value);
-    await fetchPermissions({ search: value });
+  const handleSearch = (event) => {
+    setSearchKeyword(event.target.value);
   };
 
   const handleToggleRole = async (permission, role) => {
@@ -132,7 +145,7 @@ function RolePermissionPage() {
           role,
           allowed: !currentValue,
         });
-        return await getOwnerRolePermissions({ search: searchKeyword });
+        return await getOwnerRolePermissions({ search: debouncedSearchKeyword });
       },
       `Permission ${permission.feature_name} berhasil diperbarui untuk ${role === "admin" ? "admin" : "kasir"}.`,
     );

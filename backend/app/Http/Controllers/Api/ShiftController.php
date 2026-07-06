@@ -40,6 +40,33 @@ class ShiftController extends Controller
         ]);
     }
 
+    public function active(Request $request)
+    {
+        $request->validate([
+            'username' => ['required', 'string'],
+            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+        ]);
+
+        $query = Shift::with('branch:id,name,code')
+            ->where('username', $request->username)
+            ->where('status', 'Berjalan')
+            ->whereNull('closed_at');
+
+        if ($request->filled('branch_id')) {
+            $query->where('branch_id', $request->branch_id);
+        }
+
+        $shift = $query->latest('id')->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'has_active_shift' => (bool) $shift,
+                'shift' => $shift,
+            ],
+        ]);
+    }
+
     public function current(Request $request)
     {
         $request->validate([

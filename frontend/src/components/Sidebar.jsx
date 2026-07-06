@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import * as api from "../services/api";
+import ConfirmModal from "./ConfirmModal";
 
 const PERMISSION_STORAGE_KEY = "nikky_user_permissions";
 const PERMISSION_MIGRATION_KEY = "nikky_permissions_initialized_v3";
@@ -143,7 +144,7 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
   const navigate = useNavigate();
 
   const initialUser = useMemo(() => getCurrentUser(), []);
-  const initialRole = String(initialUser?.role || "kasir").toLowerCase();
+  const initialRole = String(initialUser?.role || "cashier").toLowerCase().replace("kasir", "cashier");
 
   const [currentUser, setCurrentUser] = useState(initialUser);
   const [permissions, setPermissions] = useState(() =>
@@ -151,12 +152,13 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
   );
   const [isCollapsed, setIsCollapsed] = useState(getInitialCollapsedState);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const userRole = String(currentUser?.role || "kasir").toLowerCase();
+  const userRole = String(currentUser?.role || "cashier").toLowerCase().replace("kasir", "cashier");
 
   const isOwner = userRole === "owner";
   const isAdmin = userRole === "admin";
-  const isKasir = userRole === "kasir";
+  const isKasir = userRole === "cashier";
 
   const syncPermissions = () => {
     setPermissions(getStoredPermissions(userRole));
@@ -202,7 +204,7 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
     if (isAdmin) return adminMenus;
 
     if (isKasir) {
-      const kasirPermissions = getStoredPermissions("kasir");
+      const kasirPermissions = getStoredPermissions("cashier").length > 0 ? getStoredPermissions("cashier") : getStoredPermissions("kasir");
       const fallback = kasirPermissions.length > 0 ? kasirPermissions : DEFAULT_KASIR_PERMISSIONS;
       return kasirMenus.filter((menu) => {
         const permission = fallback.find((p) => p.id === menu.permissionId);
@@ -218,10 +220,13 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
     localStorage.removeItem("nikky_login_activity_id");
   };
 
-  const handleLogout = async () => {
-    const confirmLogout = confirm("Yakin ingin keluar dari sistem?");
+  const handleOpenLogoutModal = () => {
+    if (isLoggingOut) return;
+    setShowLogoutModal(true);
+  };
 
-    if (!confirmLogout || isLoggingOut) return;
+  const handleConfirmLogout = async () => {
+    if (isLoggingOut) return;
 
     try {
       setIsLoggingOut(true);
@@ -255,8 +260,13 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
       clearLoginSession();
       setCurrentUser(null);
       setIsLoggingOut(false);
+      setShowLogoutModal(false);
       navigate("/login", { replace: true });
     }
+  };
+
+  const handleCloseLogoutModal = () => {
+    setShowLogoutModal(false);
   };
 
   return (
@@ -375,7 +385,7 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
         <div className="border-t border-[#EBCDB8] px-4 py-4">
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={handleOpenLogoutModal}
             disabled={isLoggingOut}
             className={`flex w-full items-center rounded-xl text-sm font-semibold text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 ${
               isCollapsed ? "lg:justify-center lg:px-0 lg:py-2.5" : "gap-2 px-2 py-2.5"
@@ -388,6 +398,18 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
             </span>
           </button>
         </div>
+
+        <ConfirmModal
+          open={showLogoutModal}
+          title="Keluar dari sistem?"
+          message="Apakah Anda yakin ingin mengakhiri sesi saat ini?"
+          confirmText="Ya, Keluar"
+          cancelText="Batal"
+          variant="danger"
+          loading={isLoggingOut}
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCloseLogoutModal}
+        />
       </aside>
     </>
   );

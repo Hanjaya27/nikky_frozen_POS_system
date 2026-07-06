@@ -1,4 +1,10 @@
+import { useState } from "react";
+import { Package } from "lucide-react";
+import { getProductImageUrl } from "../utils/image";
+
 function ProductCard({ product, onAddToCart }) {
+  const [imageError, setImageError] = useState(false);
+  const imageSrc = getProductImageUrl(product);
   const formatRupiah = (value) => {
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
@@ -12,68 +18,21 @@ function ProductCard({ product, onAddToCart }) {
 
   return (
     <div className="flex h-full flex-col rounded-3xl bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
-      <div className="mb-4 flex h-44 items-center justify-center rounded-2xl bg-slate-100">
-        {product.image ? (
+      <div className="mb-4 flex h-44 items-center justify-center overflow-hidden rounded-2xl border border-[#EBCDB8] bg-[#FFF6EA]">
+        {imageSrc && !imageError ? (
           <img
-            src={product.image}
-            alt={product.name}
+            src={imageSrc}
+            alt={product.name || "Produk"}
             className="h-full w-full rounded-2xl object-cover"
+            loading="lazy"
+            onError={() => setImageError(true)}
           />
         ) : (
-          <div className="text-5xl">📦</div>
+          <div className="flex flex-col items-center gap-2 text-[#7A6258]">
+            <Package className="h-10 w-10 text-[#C80503]" />
+            <span className="text-xs font-bold">Tidak ada gambar</span>
+          </div>
         )}
-      </div>
-
-      <div className="mb-3 flex min-h-[72px] items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="min-h-[44px] text-base font-bold leading-snug text-slate-800">
-            {product.name}
-          </h3>
-
-          <p className="mt-1 text-sm text-slate-400">
-            {product.code || product.sku || "Kode Barang"}
-          </p>
-        </div>
-
-        <span className="shrink-0 whitespace-nowrap rounded-full bg-blue-50 px-4 py-2 text-sm font-bold text-blue-600">
-          {product.category || "Frozen"}
-        </span>
-      </div>
-
-      <p className="mb-5 text-xl font-bold text-blue-600">
-        {formatRupiah(product.price)}
-      </p>
-
-      <div className="mb-5 grid grid-cols-2 rounded-2xl bg-slate-50 px-4 py-4">
-        <div>
-          <p className="text-sm text-slate-400">Stok</p>
-          <p
-            className={`mt-1 text-base font-bold ${
-              isOutOfStock
-                ? "text-red-600"
-                : isLowStock
-                ? "text-yellow-600"
-                : "text-green-600"
-            }`}
-          >
-            {product.stock}
-          </p>
-        </div>
-
-        <div className="text-right">
-          <p className="text-sm text-slate-400">Status</p>
-          <p
-            className={`mt-1 text-base font-bold ${
-              isOutOfStock
-                ? "text-red-600"
-                : isLowStock
-                ? "text-yellow-600"
-                : "text-green-600"
-            }`}
-          >
-            {isOutOfStock ? "Habis" : isLowStock ? "Menipis" : "Tersedia"}
-          </p>
-        </div>
       </div>
 
       <button

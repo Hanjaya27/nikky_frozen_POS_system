@@ -186,7 +186,7 @@ function OwnerDashboard() {
         <Card className="p-5">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-black text-[#2A1712]">Tren Penjualan 7 Hari</h2>
+            <h2 className="text-lg font-black text-[#2A1712]">Tren Penjualan 7 Hari</h2>
               <p className="mt-1 text-sm font-medium text-[#7A6258]">Grafik penjualan 7 hari terakhir.</p>
             </div>
             <TrendingUp className="h-5 w-5 text-[#C80503]" />
@@ -267,7 +267,7 @@ function OwnerDashboard() {
         <Card className="p-5 xl:col-span-2">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-black text-[#2A1712]">Performa Cabang Hari Ini</h2>
+            <h2 className="text-lg font-black text-[#2A1712]">Performa Cabang Hari Ini</h2>
               <p className="mt-1 text-sm font-medium text-[#7A6258]">Ringkasan performa setiap cabang.</p>
             </div>
             <Building2 className="h-5 w-5 text-[#C80503]" />
@@ -298,7 +298,7 @@ function OwnerDashboard() {
         <Card className="p-5">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-black text-[#2A1712]">Alert Stok</h2>
+            <h2 className="text-lg font-black text-[#2A1712]">Alert Stok</h2>
               <p className="mt-1 text-sm font-medium text-[#7A6258]">Produk habis atau menipis.</p>
             </div>
             <PackageX className="h-5 w-5 text-orange-500" />
@@ -321,7 +321,7 @@ function OwnerDashboard() {
         <Card className="p-5">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-black text-[#2A1712]">Hampir Expired</h2>
+            <h2 className="text-lg font-black text-[#2A1712]">Hampir Expired</h2>
               <p className="mt-1 text-sm font-medium text-[#7A6258]">Produk yang perlu diprioritaskan.</p>
             </div>
             <PackageCheck className="h-5 w-5 text-red-500" />
@@ -345,7 +345,7 @@ function OwnerDashboard() {
         <Card className="p-5 xl:col-span-2">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-black text-[#2A1712]">Transaksi Terbaru</h2>
+            <h2 className="text-lg font-black text-[#2A1712]">Transaksi Terbaru</h2>
               <p className="mt-1 text-sm font-medium text-[#7A6258]">Lima transaksi terakhir.</p>
             </div>
             <ShoppingBag className="h-5 w-5 text-[#C80503]" />

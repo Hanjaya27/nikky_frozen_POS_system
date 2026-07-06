@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { History, Loader2, Search, ArrowRightLeft, Warehouse, PackagePlus, Edit, Settings, ArrowRight, ArrowDownLeft } from "lucide-react";
+import { History, Loader2, Search, ArrowRightLeft, Warehouse, Settings } from "lucide-react";
 import * as api from "../../services/api";
 
 function getCurrentUser() {
@@ -36,43 +36,48 @@ function AdminRiwayatStok() {
       setIsLoading(true);
       const params = { branch_id: currentUser?.branch_id };
       if (search) params.search = search;
-      if (selectedType) params.type = selectedType;
-      
+      if (selectedType === "transfer") {
+        params.type = "transfer";
+      } else if (selectedType === "stock_adjustment") {
+        params.type = "correction";
+      } else if (selectedType) {
+        params.type = selectedType;
+      }
+
       const res = await api.getStockHistories(params);
       setHistories(Array.isArray(res) ? res : []);
     } catch (err) {
       console.error(err);
+      setHistories([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser?.branch_id) {
       fetchHistories();
     }
   }, [currentUser?.branch_id, search, selectedType]);
 
   const getTypeInfo = (type) => {
     switch (type) {
-      case "mutation_to_store":
-        return { label: "Mutasi ke Toko", icon: ArrowRightLeft, color: "text-blue-700", bg: "bg-blue-50 border-blue-200" };
-      case "restock_warehouse":
-        return { label: "Restock Gudang", icon: Warehouse, color: "text-green-700", bg: "bg-green-50 border-green-200" };
       case "restock":
-        return { label: "Restok", icon: Warehouse, color: "text-green-700", bg: "bg-green-50 border-green-200" };
-      case "sale":
-        return { label: "Penjualan", icon: PackagePlus, color: "text-orange-700", bg: "bg-orange-50 border-orange-200" };
-      case "product_created":
-        return { label: "Produk Baru", icon: PackagePlus, color: "text-purple-700", bg: "bg-purple-50 border-purple-200" };
-      case "product_updated":
-        return { label: "Update Stok", icon: Edit, color: "text-orange-700", bg: "bg-orange-50 border-orange-200" };
+      case "stock_restock":
+      case "batch_restock":
+        return { label: "Restock", icon: Warehouse, color: "text-green-700", bg: "bg-green-50 border-green-200" };
+      case "transfer":
+      case "transfer_in":
+      case "transfer_out":
+      case "branch_transfer":
+      case "batch_transfer":
+        return { label: "Transfer Antar Cabang", icon: ArrowRightLeft, color: "text-amber-700", bg: "bg-amber-50 border-amber-200" };
+      case "correction":
+      case "stock_correction":
+      case "koreksi":
+      case "adjustment":
       case "stock_adjustment":
         return { label: "Koreksi Stok", icon: Settings, color: "text-[#C80503]", bg: "bg-[#FFF6EA] border-[#EBCDB8]" };
-      case "transfer_out":
-        return { label: "Transfer Keluar", icon: ArrowRight, color: "text-orange-600", bg: "bg-orange-50 border-orange-200" };
-      case "transfer_in":
-        return { label: "Transfer Masuk", icon: ArrowDownLeft, color: "text-blue-700", bg: "bg-blue-50 border-blue-200" };
       default:
         return { label: type, icon: History, color: "text-gray-700", bg: "bg-gray-50 border-gray-200" };
     }
@@ -85,13 +90,13 @@ function AdminRiwayatStok() {
       <div className="mb-2">
         <h1 className="text-2xl font-black text-[#2A1712]">Riwayat Stok</h1>
         <p className="mt-1 text-sm font-semibold text-[#7A6258]">
-          Kelola produk, stok gudang, mutasi, dan riwayat stok cabang Anda.
+          Riwayat restock, transfer antar cabang, dan koreksi stok untuk cabang Anda.
         </p>
       </div>
 
       <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] shadow-sm">
-        <div className="p-5 border-b border-[#EBCDB8] flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="relative max-w-md w-full">
+        <div className="flex flex-col justify-between gap-4 border-b border-[#EBCDB8] p-5 sm:flex-row">
+          <div className="relative w-full max-w-md">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#7A6258]" />
             <input
               value={search}
@@ -100,25 +105,24 @@ function AdminRiwayatStok() {
               className="w-full rounded-xl border border-[#EBCDB8] bg-white py-2.5 pl-12 pr-4 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20"
             />
           </div>
-          
+
           <div className="flex gap-2">
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="rounded-xl border border-[#EBCDB8] bg-white px-4 py-2.5 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503] min-w-[200px]"
+              className="min-w-[200px] rounded-xl border border-[#EBCDB8] bg-white px-4 py-2.5 text-sm font-bold text-[#2A1712] outline-none focus:border-[#C80503]"
             >
               <option value="">Semua Tipe Aktivitas</option>
-              <option value="restock">Restock Stok</option>
-              <option value="sale">Penjualan</option>
+              <option value="restock">Restock</option>
+              <option value="transfer">Transfer Antar Cabang</option>
               <option value="stock_adjustment">Koreksi Stok</option>
-              <option value="transfer_out">Transfer Keluar</option>
-              <option value="transfer_in">Transfer Masuk</option>
-              <option value="product_created">Produk Baru Dibuat</option>
-              <option value="product_updated">Produk Diupdate</option>
             </select>
             <button
-              onClick={() => { setSearch(""); setSelectedType(""); }}
-              className="px-4 py-2.5 rounded-xl border border-[#EBCDB8] bg-white text-sm font-bold text-[#7A6258] hover:bg-[#FFF6EA] transition"
+              onClick={() => {
+                setSearch("");
+                setSelectedType("");
+              }}
+              className="rounded-xl border border-[#EBCDB8] bg-white px-4 py-2.5 text-sm font-bold text-[#7A6258] transition hover:bg-[#FFF6EA]"
             >
               Reset
             </button>
@@ -135,7 +139,7 @@ function AdminRiwayatStok() {
             <table className="w-full min-w-[1000px] text-left text-sm">
               <thead className="bg-[#FFF6EA] text-xs font-black uppercase text-[#7A6258]">
                 <tr>
-                  <th className="px-5 py-4 w-48">Waktu</th>
+                  <th className="w-48 px-5 py-4">Waktu</th>
                   <th className="px-5 py-4">Produk</th>
                   <th className="px-5 py-4">Aktivitas</th>
                   <th className="px-5 py-4 text-center">Jumlah</th>
@@ -145,42 +149,43 @@ function AdminRiwayatStok() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EBCDB8]">
-                {histories.map((h) => {
-                  const info = getTypeInfo(h.type);
+                {histories.map((history) => {
+                  const info = getTypeInfo(history.type);
                   const Icon = info.icon;
                   return (
-                    <tr key={h.id} className="hover:bg-[#FFF6EA]/50 transition">
-                      <td className="px-5 py-4 font-semibold text-[#7A6258] whitespace-nowrap">
-                        {formatDate(h.created_at)}
+                    <tr key={history.id} className="transition hover:bg-[#FFF6EA]/50">
+                      <td className="whitespace-nowrap px-5 py-4 font-semibold text-[#7A6258]">
+                        {formatDate(history.created_at)}
                       </td>
                       <td className="px-5 py-4">
-                        <p className="font-black text-[#2A1712]">{h.product?.name || "Produk Terhapus"}</p>
-                        <p className="text-xs font-bold text-[#7A6258] mt-1">{h.product?.code || "-"}</p>
+                        <p className="font-black text-[#2A1712]">{history.product?.name || "Produk Terhapus"}</p>
+                        <p className="mt-1 text-xs font-bold text-[#7A6258]">{history.product?.code || "-"}</p>
                       </td>
                       <td className="px-5 py-4">
-                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold ${info.bg} ${info.color}`}>
-                          <Icon className="w-3.5 h-3.5" /> {info.label}
+                        <div className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold ${info.bg} ${info.color}`}>
+                          <Icon className="h-3.5 w-3.5" />
+                          {info.label}
                         </div>
                       </td>
                       <td className="px-5 py-4 text-center">
-                        <span className="font-black text-[#C80503] bg-[#FFF6EA] px-2 py-1 rounded-md border border-[#EBCDB8]">
-                          {h.quantity}
+                        <span className="rounded-md border border-[#EBCDB8] bg-[#FFF6EA] px-2 py-1 font-black text-[#C80503]">
+                          {history.quantity}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-center whitespace-nowrap">
-                        <span className="text-[#7A6258] line-through decoration-[#C80503]/50 mr-1 text-xs">{h.before_store_stock}</span>
-                        <ArrowRightLeft className="inline w-3 h-3 text-[#EBCDB8] mx-1" />
-                        <span className="font-black text-[#2A1712] ml-1">{h.after_store_stock}</span>
+                      <td className="whitespace-nowrap px-5 py-4 text-center">
+                        <span className="mr-1 text-xs text-[#7A6258] line-through decoration-[#C80503]/50">
+                          {history.before_store_stock}
+                        </span>
+                        <ArrowRightLeft className="mx-1 inline h-3 w-3 text-[#EBCDB8]" />
+                        <span className="ml-1 font-black text-[#2A1712]">{history.after_store_stock}</span>
                       </td>
                       <td className="px-5 py-4">
                         <span className="font-semibold text-[#7A6258]">
-                          {h.user?.name || h.user?.username || "Sistem"}
+                          {history.user?.name || history.user?.username || "Sistem"}
                         </span>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="text-xs font-medium text-[#7A6258]">
-                          {h.note || "-"}
-                        </span>
+                        <span className="text-xs font-medium text-[#7A6258]">{history.note || "-"}</span>
                       </td>
                     </tr>
                   );
@@ -189,7 +194,7 @@ function AdminRiwayatStok() {
             </table>
           ) : (
             <div className="p-16 text-center text-[#7A6258]">
-              <History className="mx-auto h-12 w-12 text-[#EBCDB8] mb-3" />
+              <History className="mx-auto mb-3 h-12 w-12 text-[#EBCDB8]" />
               <p className="font-bold">Tidak ada riwayat aktivitas stok.</p>
             </div>
           )}

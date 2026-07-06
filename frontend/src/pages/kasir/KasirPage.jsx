@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Banknote,
@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import * as api from "../../services/api";
+import { getProductImageUrl } from "../../utils/image";
 
 const paymentMethods = [
   { id: "Tunai", label: "Tunai", icon: Banknote },
@@ -69,14 +70,16 @@ function normalizeProduct(product) {
     expiredDate: product.expired_date || null,
     storageLocation: product.storage_location || "-",
     image: product.image || null,
+    image_url: product.image_url || null,
     status: product.status || "Aktif",
   };
 }
 
 function ProductImage({ product }) {
-  const imageUrl = getImageUrl(product.image);
+  const [imageError, setImageError] = useState(false);
+  const imageUrl = getProductImageUrl(product);
 
-  if (!imageUrl) {
+  if (!imageUrl || imageError) {
     return (
       <div className="flex aspect-[4/3] w-full items-center justify-center rounded-xl bg-gradient-to-br from-[#FFF6EA] to-[#EBCDB8] text-[#C80503]">
         <div className="text-center">
@@ -94,10 +97,9 @@ function ProductImage({ product }) {
       <img
         src={imageUrl}
         alt={product.name}
-        className="h-full w-full object-contain"
-        onError={(event) => {
-          event.currentTarget.style.display = "none";
-        }}
+        className="h-full w-full object-cover"
+        loading="lazy"
+        onError={() => setImageError(true)}
       />
     </div>
   );
@@ -129,7 +131,7 @@ function ProductCard({ product, cartQuantity, onAdd }) {
             {product.name}
           </p>
           <p className="mt-0.5 truncate text-[10px] font-semibold text-[#7A6258]">
-            {product.code} • {product.category}
+            {product.code} â€¢ {product.category}
           </p>
         </div>
 
@@ -172,7 +174,7 @@ function CartItem({ item, onIncrease, onDecrease, onRemove }) {
             {item.name}
           </p>
           <p className="mt-0.5 text-xs font-semibold text-[#7A6258]">
-            {item.code} • {formatRupiah(item.price)}
+            {item.code} â€¢ {formatRupiah(item.price)}
           </p>
         </div>
 
@@ -355,7 +357,45 @@ function PaymentModal({
   );
 }
 
-function SuccessModal({ transaction, onClose }) {
+function ClearCartModal({ isOpen, onCancel, onConfirm }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-[#2A1712]/55 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[2rem] border border-[#EBCDB8] bg-[#FFFDF8] p-6 shadow-2xl">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FFF6EA] text-[#C80503] border border-[#EBCDB8]">
+          <ShoppingCart className="h-7 w-7" />
+        </div>
+
+        <h2 className="mt-4 text-center text-2xl font-black text-[#2A1712]">
+          Kosongkan keranjang?
+        </h2>
+        <p className="mt-2 text-center text-sm font-medium text-[#7A6258]">
+          Semua item yang sudah dipilih akan dihapus dari keranjang.
+        </p>
+
+        <div className="mt-6 flex gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 rounded-xl border border-[#EBCDB8] bg-white px-4 py-3 text-sm font-bold text-[#2A1712] hover:bg-[#FFF6EA]"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex-1 rounded-xl bg-[#C80503] px-4 py-3 text-sm font-bold text-white shadow-md hover:bg-[#8B0306]"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SuccessModal({ transaction, onClose, onPrint }) {
   if (!transaction) return null;
 
   return (
@@ -398,7 +438,7 @@ function SuccessModal({ transaction, onClose }) {
         <div className="mt-5 grid grid-cols-2 gap-3">
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={onPrint || (() => window.print())}
             className="flex items-center justify-center gap-2 rounded-xl border border-[#EBCDB8] bg-white px-4 py-3 text-sm font-bold text-[#2A1712] hover:bg-[#FFF6EA]"
           >
             <Printer className="h-4 w-4" />
@@ -429,11 +469,33 @@ function KasirPage() {
   const [cashReceived, setCashReceived] = useState("");
   const [successTransaction, setSuccessTransaction] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isClearCartOpen, setIsClearCartOpen] = useState(false);
+  const [activeShift, setActiveShift] = useState(null);
+  const [hasActiveShift, setHasActiveShift] = useState(false);
+  const [shiftLoading, setShiftLoading] = useState(true);
+  const [showShiftWarning, setShowShiftWarning] = useState(false);
   
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const checkActiveShift = async () => {
+      if (!currentUser) return;
+      try {
+        setShiftLoading(true);
+        const res = await api.getActiveShift({ username: currentUser.username });
+        setActiveShift(res.shift);
+        setHasActiveShift(res.has_active_shift);
+        setShowShiftWarning(!res.has_active_shift);
+      } catch (err) {
+        console.error("Gagal cek shift:", err);
+      } finally {
+        setShiftLoading(false);
+      }
+    };
+    checkActiveShift();
+  }, [currentUser]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("nikky_user");
@@ -562,14 +624,14 @@ function KasirPage() {
 
   const handleClearCart = () => {
     if (cart.length === 0) return;
-
-    const confirmClear = window.confirm("Kosongkan keranjang?");
-    if (!confirmClear) return;
-
-    setCart([]);
+    setIsClearCartOpen(true);
+  };
+  const handlePrintReceipt = () => {
+    window.print();
   };
 
   const handleOpenPayment = () => {
+    if (!hasActiveShift) { setShowShiftWarning(true); return; }
     if (cart.length === 0) return;
     setErrorMessage("");
     setPaymentMethod("Tunai");
@@ -618,7 +680,7 @@ function KasirPage() {
       setSuccessTransaction(result);
       
     } catch (error) {
-      alert("Gagal memproses transaksi: " + error.message);
+      setErrorMessage(error.message || "Gagal memproses transaksi.");
     } finally {
       setIsSubmitting(false);
     }
@@ -689,6 +751,19 @@ function KasirPage() {
               {errorMessage}
             </div>
           )}
+
+          {!shiftLoading && !hasActiveShift && (
+            <div className="mb-6 flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-700">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-orange-500" />
+              <div>
+                <p className="font-bold">Shift belum dibuka</p>
+                <p className="mt-0.5 font-medium text-orange-600">
+                  Anda harus membuka shift terlebih dahulu sebelum melakukan transaksi.
+                </p>
+              </div>
+            </div>
+          )}
+
 
           {isLoadingProducts ? (
             <div className="rounded-[1.5rem] border border-[#EBCDB8] bg-[#FFFDF8] p-10 text-center shadow-sm">
@@ -791,7 +866,7 @@ function KasirPage() {
                 <button
                   type="button"
                   onClick={handleOpenPayment}
-                  disabled={cart.length === 0}
+                  disabled={cart.length === 0 || !hasActiveShift || shiftLoading}
                   className="flex items-center justify-center gap-2 rounded-xl bg-[#C80503] px-4 py-3.5 text-sm font-bold text-white shadow-md hover:bg-[#8B0306] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none transition-all"
                 >
                   Checkout
@@ -816,6 +891,43 @@ function KasirPage() {
         isSubmitting={isSubmitting}
       />
 
+      <ClearCartModal
+        isOpen={isClearCartOpen}
+        onCancel={() => setIsClearCartOpen(false)}
+        onConfirm={() => {
+          setCart([]);
+          setIsClearCartOpen(false);
+        }}
+      />
+
+
+      {showShiftWarning && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-[#EBCDB8] bg-white p-6 shadow-xl">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-orange-100">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+            </div>
+            <h2 className="text-center text-lg font-bold text-[#2A1712]">Shift belum dibuka</h2>
+            <p className="mt-2 text-center text-sm text-[#7A6258]">
+              Anda belum membuka shift. Silakan buka shift terlebih dahulu sebelum melakukan transaksi.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowShiftWarning(false)}
+                className="flex-1 rounded-xl border border-[#EBCDB8] bg-white px-4 py-2.5 text-sm font-bold text-[#7A6258] hover:bg-[#FFF6EA] transition"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => { setShowShiftWarning(false); window.location.href = "/shift"; }}
+                className="flex-1 rounded-xl bg-[#C80503] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#A80000] transition"
+              >
+                Buka Shift
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <SuccessModal
         transaction={successTransaction}
         onClose={() => setSuccessTransaction(null)}
@@ -825,3 +937,9 @@ function KasirPage() {
 }
 
 export default KasirPage;
+
+
+
+
+
+

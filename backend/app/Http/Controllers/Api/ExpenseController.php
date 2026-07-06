@@ -46,6 +46,7 @@ class ExpenseController extends Controller
             });
         }
 
+        $perPage = $request->query('per_page', 10);
         $expenses = $query->get();
 
         return response()->json([
@@ -149,3 +150,4 @@ class ExpenseController extends Controller
         ]);
     }
 }
+

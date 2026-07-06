@@ -48,10 +48,11 @@ function Topbar() {
   }, [currentUser]);
 
   const displayName = currentUser?.name || "Guest User";
-  const displayRole = currentUser?.role === "owner" ? "Owner" : "Kasir";
+  const role = String(currentUser?.role || "").toLowerCase().replace("kasir", "cashier");
+  const displayRole = role === "owner" ? "Owner" : role === "admin" ? "Admin" : "Kasir";
   const displayBranch = currentUser?.branch || "-";
   const displayShift = currentUser?.shift || "-";
-  const isOwner = currentUser?.role === "owner";
+  const isOwner = role === "owner";
 
   const notifications = useMemo(() => {
     if (isOwner) {

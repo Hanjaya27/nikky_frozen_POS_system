@@ -13,12 +13,40 @@ class StockHistoryController extends Controller
         $query = StockHistory::with(['product:id,name,code,category', 'user:id,name,username'])
             ->orderBy('id', 'desc');
 
+        $typeMappings = [
+            'restock' => ['restock', 'stock_restock', 'batch_restock'],
+            'transfer' => ['transfer', 'transfer_in', 'transfer_out', 'branch_transfer', 'batch_transfer'],
+            'correction' => ['correction', 'stock_correction', 'koreksi', 'adjustment', 'stock_adjustment'],
+        ];
+
+        $relevantTypes = array_values(array_unique(array_merge(
+            $typeMappings['restock'],
+            $typeMappings['transfer'],
+            $typeMappings['correction']
+        )));
+
+        $resolveTypes = function (string $value) use ($typeMappings) {
+            return $typeMappings[$value] ?? [$value];
+        };
+
         if ($request->filled('branch_id')) {
             $query->where('branch_id', $request->branch_id);
         }
 
         if ($request->filled('type')) {
-            $query->where('type', $request->type);
+            $requestedTypes = collect(explode(',', $request->type))
+                ->map(fn ($type) => trim($type))
+                ->filter()
+                ->flatMap(fn ($type) => $resolveTypes($type))
+                ->unique()
+                ->values()
+                ->all();
+
+            if (! empty($requestedTypes)) {
+                $query->whereIn('type', $requestedTypes);
+            }
+        } else {
+            $query->whereIn('type', $relevantTypes);
         }
 
         if ($request->filled('search')) {

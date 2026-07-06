@@ -1,0 +1,10 @@
+{
+  "name": "Nikky Frozen POS",
+  "short_name": "Nikky POS",
+  "description": "Sistem kasir dan stok Nikky Frozen Food",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fffaf3",
+  "theme_color": "#d50000",
+  "icons": []
+}

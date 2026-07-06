@@ -8,6 +8,16 @@ import frozenFoodImage from "../../assets/Frozen food.jpg";
 const branches = ["Cabang 1", "Cabang 2"];
 const shifts = ["Shift Pagi", "Shift Sore"];
 
+function normalizeRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  if (normalized === "kasir") return "cashier";
+  return normalized;
+}
+
+function isActiveStatus(status) {
+  return ["active", "aktif", "1", "true"].includes(String(status || "").trim().toLowerCase());
+}
+
 function formatDateTime(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -23,7 +33,7 @@ function LoginPage() {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    userType: "kasir",
+    userType: "cashier",
     username: "",
     password: "",
     branch: "Cabang 1",
@@ -77,9 +87,9 @@ function LoginPage() {
       name: user.name,
       username: user.username,
       email: user.email,
-      role: user.role,
+      role: normalizeRole(user.role),
       branch_id: user.branch_id,
-      branch: user.role === "owner" ? "Semua Cabang" : user.branch,
+      branch: normalizeRole(user.role) === "owner" ? "Semua Cabang" : user.branch,
       branch_code: user.branch_code,
       shift: user.shift,
       phone: user.phone,
@@ -97,21 +107,21 @@ function LoginPage() {
   };
 
   const validateLoginResult = (user) => {
-    if (user.role !== formData.userType) {
-      return `Akun ini terdaftar sebagai ${user.role}, bukan ${formData.userType}.`;
+    if (normalizeRole(user.role) !== formData.userType) {
+      return `Jenis pengguna tidak sesuai dengan akun ini.`;
     }
 
-    if (user.status !== "Aktif") {
+    if (!isActiveStatus(user.status)) {
       return "Akun ini sedang nonaktif. Silakan hubungi owner.";
     }
 
-    if (user.role === "kasir" || user.role === "admin") {
+    if (normalizeRole(user.role) === "cashier" || user.role === "admin") {
       if (user.branch !== formData.branch) {
         return `Akun ${user.username} hanya terdaftar untuk ${user.branch}.`;
       }
     }
 
-    if (user.role === "kasir") {
+    if (normalizeRole(user.role) === "cashier") {
       if (user.shift !== formData.shift) {
         return `Akun ${user.username} terdaftar untuk ${user.shift}.`;
       }
@@ -151,9 +161,9 @@ function LoginPage() {
 
       saveLoginSession(loginData);
 
-      if (loginData.user.role === "owner") {
+      if (normalizeRole(loginData.user.role) === "owner") {
         navigate("/owner/dashboard");
-      } else if (loginData.user.role === "admin") {
+      } else if (normalizeRole(loginData.user.role) === "admin") {
         navigate("/admin/dashboard");
       } else {
         navigate("/");
@@ -234,8 +244,8 @@ function LoginPage() {
               <div className="flex rounded-xl border border-[#EBCDB8] bg-white p-1">
                 <button
                   type="button"
-                  onClick={() => handleUserTypeChange("kasir")}
-                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all duration-200 ${formData.userType === "kasir"
+                  onClick={() => handleUserTypeChange("cashier")}
+                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all duration-200 ${formData.userType === "cashier"
                       ? "bg-[#C80503] text-white shadow-sm"
                       : "text-[#7A6258] hover:bg-[#FFF6EA]"
                     }`}
@@ -348,7 +358,7 @@ function LoginPage() {
               </div>
             </div>
 
-            {formData.userType === "kasir" && (
+            {formData.userType === "cashier" && (
               <div>
                 <label className="mb-1.5 block text-sm font-bold text-[#2A1712]">
                   Shift

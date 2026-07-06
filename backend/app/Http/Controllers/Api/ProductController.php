@@ -35,6 +35,11 @@ class ProductController extends Controller
 
         $products = $query->get();
 
+        $products->transform(function ($product) use ($request) {
+            $product->image_url = $product->image ? $request->getSchemeAndHttpHost() . Storage::url($product->image) : null;
+            return $product;
+        });
+
         return response()->json([
             'success' => true,
             'message' => 'Data produk berhasil diambil.',
@@ -42,7 +47,7 @@ class ProductController extends Controller
         ]);
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $product = Product::with('branch:id,name,code')->find($id);
 
@@ -53,6 +58,8 @@ class ProductController extends Controller
             ], 404);
         }
 
+        $product->image_url = $product->image ? $request->getSchemeAndHttpHost() . Storage::url($product->image) : null;
+
         return response()->json([
             'success' => true,
             'message' => 'Detail produk berhasil diambil.',
@@ -62,56 +69,66 @@ class ProductController extends Controller
 
     public function store(Request $request)
     {
-        $validatedData = $request->validate([
-            'branch_id' => ['required', 'exists:branches,id'],
-            'code' => ['required', 'string', 'max:50', 'unique:products,code'],
-            'name' => ['required', 'string', 'max:255'],
-            'category' => ['required', 'string', 'max:100'],
-            'stock' => ['nullable', 'integer', 'min:0'],
-            'store_stock' => ['nullable', 'integer', 'min:0'],
-            'warehouse_stock' => ['nullable', 'integer', 'min:0'],
-            'price' => ['required', 'integer', 'min:0'],
-            'expired_date' => ['nullable', 'date'],
-            'storage_location' => ['nullable', 'string', 'max:100'],
-            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'status' => ['nullable', 'string', 'max:50'],
-        ]);
+        try {
+            $validatedData = $request->validate([
+                'branch_id' => ['required', 'exists:branches,id'],
+                'code' => ['required', 'string', 'max:50', 'unique:products,code'],
+                'name' => ['required', 'string', 'max:255'],
+                'category' => ['required', 'string', 'max:100'],
+                'stock' => ['nullable', 'integer', 'min:0'],
+                'store_stock' => ['nullable', 'integer', 'min:0'],
+                'warehouse_stock' => ['nullable', 'integer', 'min:0'],
+                'price' => ['required', 'integer', 'min:0'],
+                'expired_date' => ['nullable', 'date'],
+                'storage_location' => ['nullable', 'string', 'max:100'],
+                'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+                'status' => ['nullable', 'string', 'max:50'],
+            ]);
 
-        if ($request->hasFile('image')) {
-            $path = $request->file('image')->store('products', 'public');
-            $validatedData['image'] = $path;
+            if ($request->hasFile('image')) {
+                $path = $request->file('image')->store('products', 'public');
+                $validatedData['image'] = $path;
+            }
+
+            $validatedData['status'] = $validatedData['status'] ?? 'Aktif';
+
+            if (isset($validatedData['stock'])) {
+                $validatedData['stock'] = (int) $validatedData['stock'];
+            } else {
+                $validatedData['stock'] = (int) ($validatedData['store_stock'] ?? 0) + (int) ($validatedData['warehouse_stock'] ?? 0);
+            }
+
+            $validatedData['store_stock'] = $validatedData['stock'];
+            $validatedData['warehouse_stock'] = $validatedData['stock'];
+            $validatedData['min_stock'] = 0;
+
+            $product = Product::create($validatedData);
+
+            StockHistory::create([
+                'product_id' => $product->id,
+                'branch_id' => $product->branch_id,
+                'user_id' => auth()->id(),
+                'type' => 'product_created',
+                'quantity' => $product->stock,
+                'before_store_stock' => 0,
+                'after_store_stock' => $product->stock,
+                'before_warehouse_stock' => 0,
+                'after_warehouse_stock' => $product->stock,
+                'note' => 'Produk baru ditambahkan',
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Produk berhasil ditambahkan.',
+                'data' => $product->load('branch:id,name,code'),
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menyimpan produk. Periksa data produk dan coba lagi.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
         }
-
-        $validatedData['status'] = $validatedData['status'] ?? 'Aktif';
-
-        if (isset($validatedData['stock'])) {
-            $validatedData['stock'] = (int) $validatedData['stock'];
-        } else {
-            $validatedData['stock'] = (int) ($validatedData['store_stock'] ?? 0) + (int) ($validatedData['warehouse_stock'] ?? 0);
-        }
-
-        $validatedData['min_stock'] = 0;
-
-        $product = Product::create($validatedData);
-
-        StockHistory::create([
-            'product_id' => $product->id,
-            'branch_id' => $product->branch_id,
-            'user_id' => $request->user_id,
-            'type' => 'product_created',
-            'quantity' => $product->stock,
-            'before_store_stock' => 0,
-            'after_store_stock' => $product->store_stock,
-            'before_warehouse_stock' => 0,
-            'after_warehouse_stock' => $product->warehouse_stock,
-            'note' => 'Produk baru ditambahkan',
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Produk berhasil ditambahkan.',
-            'data' => $product->load('branch:id,name,code'),
-        ], 201);
     }
 
     public function update(Request $request, $id)
@@ -577,3 +594,4 @@ class ProductController extends Controller
         }
     }
 }
+

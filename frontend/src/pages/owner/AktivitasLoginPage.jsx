@@ -68,6 +68,7 @@ function AktivitasLoginPage() {
   const [activities, setActivities] = useState([]);
   const [summary, setSummary] = useState({});
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [debouncedSearchKeyword, setDebouncedSearchKeyword] = useState("");
   const [selectedBranch, setSelectedBranch] = useState("Semua");
   const [selectedShift, setSelectedShift] = useState("Semua");
   const [selectedStatus, setSelectedStatus] = useState("Semua");
@@ -105,8 +106,8 @@ function AktivitasLoginPage() {
         params.date = selectedDate;
       }
 
-      if (searchKeyword.trim()) {
-        params.search = searchKeyword.trim();
+      if (debouncedSearchKeyword.trim()) {
+        params.search = debouncedSearchKeyword.trim();
       }
 
       const response = await getOwnerLoginActivities(params);
@@ -127,8 +128,13 @@ function AktivitasLoginPage() {
   };
 
   useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedSearchKeyword(searchKeyword), 400);
+    return () => clearTimeout(timeoutId);
+  }, [searchKeyword]);
+
+  useEffect(() => {
     fetchActivities();
-  }, [selectedBranch, selectedRole, selectedStatus, selectedShift, selectedDate, searchKeyword]);
+  }, [selectedBranch, selectedRole, selectedStatus, selectedShift, selectedDate, debouncedSearchKeyword]);
 
   const showSuccess = (message) => {
     setSuccessMessage(message);
@@ -150,7 +156,7 @@ function AktivitasLoginPage() {
       await fetchActivities();
       showSuccess("Status login berhasil diubah menjadi logout.");
     } catch (error) {
-      alert(error.message || "Gagal melakukan force logout.");
+      setErrorMessage(error.message || "Gagal melakukan force logout.");
     }
   };
 
@@ -164,13 +170,13 @@ function AktivitasLoginPage() {
       await fetchActivities();
       showSuccess("Data aktivitas login berhasil dihapus.");
     } catch (error) {
-      alert(error.message || "Gagal menghapus aktivitas login.");
+      setErrorMessage(error.message || "Gagal menghapus aktivitas login.");
     }
   };
 
   const exportCSV = () => {
     if (activities.length === 0) {
-      alert("Tidak ada data aktivitas login untuk diexport.");
+      setErrorMessage("Tidak ada data aktivitas login untuk diexport.");
       return;
     }
 

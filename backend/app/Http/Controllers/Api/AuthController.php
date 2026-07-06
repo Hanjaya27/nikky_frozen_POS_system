@@ -28,7 +28,7 @@ class AuthController extends Controller
             ], 401);
         }
 
-        if ($user->status !== 'Aktif') {
+        if (!$this->isUserActive($user)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akun tidak aktif. Hubungi owner.',
@@ -109,6 +109,23 @@ class AuthController extends Controller
         ]);
     }
 
+    private function isUserActive($user): bool
+    {
+        $status = trim((string) ($user->status ?? ''));
+        return in_array(strtolower($status), [
+            'active', 'aktif', '1', 'true', 'yes', 'on',
+        ]);
+    }
+
+    private function normalizeRole($role): string
+    {
+        return match (strtolower(trim((string) $role))) {
+            'owner' => 'owner',
+            'admin' => 'admin',
+            'kasir', 'cashier' => 'cashier',
+            default => strtolower(trim((string) $role)),
+        };
+    }
     private function detectDevice($userAgent)
     {
         if (!$userAgent) {

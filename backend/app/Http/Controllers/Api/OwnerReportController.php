@@ -12,6 +12,58 @@ use Illuminate\Support\Facades\DB;
 
 class OwnerReportController extends Controller
 {
+    private function resolveReportPeriod(Request $request): array
+    {
+        $period = $request->query('period', 'month');
+        $startDate = $request->query('start_date');
+        $endDate = $request->query('end_date');
+
+        if ($period === 'today') {
+            return ['today', Carbon::today()->startOfDay(), Carbon::today()->endOfDay()];
+        }
+
+        if ($period === '7days') {
+            return ['7days', Carbon::today()->subDays(6)->startOfDay(), Carbon::today()->endOfDay()];
+        }
+
+        if ($period === 'custom' && $startDate && $endDate) {
+            return ['custom', Carbon::parse($startDate)->startOfDay(), Carbon::parse($endDate)->endOfDay()];
+        }
+
+        return ['month', Carbon::today()->startOfMonth(), Carbon::today()->endOfMonth()];
+    }
+
+    private function resolveBranchLabel(?string $branchId): string
+    {
+        if (!$branchId) {
+            return 'Semua Cabang';
+        }
+
+        $branch = Branch::query()->select('id', 'name')->find($branchId);
+
+        return $branch?->name ?? ('Cabang ' . $branchId);
+    }
+
+    private function getFilteredQueries(Carbon $queryStartDate, Carbon $queryEndDate, ?string $branchId): array
+    {
+        $transactionQuery = Transaction::query()
+            ->with(['branch:id,name,code', 'items.product:id,code,name'])
+            ->whereBetween('transaction_date', [$queryStartDate, $queryEndDate])
+            ->whereIn('status', ['Berhasil', 'Lunas', 'Selesai']);
+
+        $expenseQuery = Expense::query()
+            ->with(['branch:id,name,code'])
+            ->whereBetween('expense_date', [$queryStartDate, $queryEndDate])
+            ->where('status', 'Aktif');
+
+        if ($branchId) {
+            $transactionQuery->where('branch_id', $branchId);
+            $expenseQuery->where('branch_id', $branchId);
+        }
+
+        return [$transactionQuery, $expenseQuery];
+    }
+
     public function index(Request $request)
     {
         try {
@@ -41,37 +93,25 @@ class OwnerReportController extends Controller
                 $queryStartDate = Carbon::parse($startDate)->startOfDay();
                 $queryEndDate = Carbon::parse($endDate)->endOfDay();
             } else {
-                // Default to month if period is invalid or custom dates are missing
                 $period = 'month';
                 $queryStartDate = Carbon::today()->startOfMonth();
                 $queryEndDate = Carbon::today()->endOfMonth();
             }
 
-            // Enforce branch_id for non-owner roles if a specific branch is not requested by owner
             if (!$isOwner && !$branchId) {
                 $branchId = $user->branch_id;
             }
 
-            // Base queries for transactions and expenses
-            $baseTransactionQuery = Transaction::query()
-                ->whereIn('status', ['Berhasil', 'Lunas', 'Selesai'])
-                ->whereBetween('transaction_date', [$queryStartDate, $queryEndDate]);
+            [$baseTransactionQuery, $baseExpenseQuery] = $this->getFilteredQueries($queryStartDate, $queryEndDate, $branchId);
 
-            $baseExpenseQuery = Expense::query()
-                ->where('status', 'Aktif')
-                ->whereBetween('expense_date', [$queryStartDate, $queryEndDate]);
-
-            // Apply branch filter
-            if ($branchId && ($isOwner || ($isAdmin && (int)$branchId === (int)$user->branch_id))) {
+            if ($branchId && ($isOwner || ($isAdmin && (int) $branchId === (int) $user->branch_id))) {
                 $baseTransactionQuery->where('branch_id', $branchId);
                 $baseExpenseQuery->where('branch_id', $branchId);
             } elseif ($isAdmin && !$isOwner) {
-                 // Admin can only see their own branch if no branch is specified or if owner is not requesting a specific branch
                 $baseTransactionQuery->where('branch_id', $user->branch_id);
                 $baseExpenseQuery->where('branch_id', $user->branch_id);
             }
 
-            // Summary Calculations
             $totalRevenue = (clone $baseTransactionQuery)->sum('grand_total');
             $totalTransactions = (clone $baseTransactionQuery)->count();
             $totalExpenses = (clone $baseExpenseQuery)->sum('amount');
@@ -86,18 +126,13 @@ class OwnerReportController extends Controller
                 'average_transaction' => (int) $averageTransaction,
             ];
 
-            // Chart Data (Revenue vs Expenses per day)
             $chartData = [];
             $currentDate = clone $queryStartDate;
 
             while ($currentDate->lte($queryEndDate)) {
                 $dateKey = $currentDate->toDateString();
-                $transactionsOnDay = (clone $baseTransactionQuery)
-                    ->whereDate('transaction_date', $currentDate->toDateString())
-                    ->get();
-                $expensesOnDay = (clone $baseExpenseQuery)
-                    ->whereDate('expense_date', $currentDate->toDateString())
-                    ->get();
+                $transactionsOnDay = (clone $baseTransactionQuery)->whereDate('transaction_date', $dateKey)->get();
+                $expensesOnDay = (clone $baseExpenseQuery)->whereDate('expense_date', $dateKey)->get();
 
                 $chartData[] = [
                     'date' => $dateKey,
@@ -106,25 +141,21 @@ class OwnerReportController extends Controller
                     'expenses' => (int) $expensesOnDay->sum('amount'),
                     'transactions' => (int) $transactionsOnDay->count(),
                 ];
+
                 $currentDate->addDay();
             }
 
-            // Top Products
-            $topProducts = DB::table('transaction_items')
+            $topProducts = (clone $baseTransactionQuery)
+                ->join('transaction_items', 'transactions.id', '=', 'transaction_items.transaction_id')
                 ->select(
-                    'products.id as product_id',
-                    'products.name as product_name',
-                    'products.code as product_code',
+                    'transaction_items.product_id',
+                    'transaction_items.product_name',
+                    'transaction_items.product_code',
                     DB::raw('SUM(transaction_items.quantity) as quantity_sold'),
                     DB::raw('SUM(transaction_items.subtotal) as total_revenue')
                 )
-                ->join('transactions', 'transaction_items.transaction_id', '=', 'transactions.id')
-                ->join('products', 'transaction_items.product_id', '=', 'products.id')
-                ->whereIn('transactions.status', ['Berhasil', 'Lunas', 'Selesai'])
-                ->whereBetween('transactions.transaction_date', [$queryStartDate, $queryEndDate])
-                ->when($branchId, fn ($query) => $query->where('transactions.branch_id', $branchId))
-                ->groupBy('products.id', 'products.name', 'products.code')
-                ->orderBy('quantity_sold', 'desc')
+                ->groupBy('transaction_items.product_id', 'transaction_items.product_name', 'transaction_items.product_code')
+                ->orderByDesc('quantity_sold')
                 ->take(10)
                 ->get()
                 ->map(fn ($product) => [
@@ -135,7 +166,6 @@ class OwnerReportController extends Controller
                     'total_revenue' => (int) $product->total_revenue,
                 ])->values();
 
-            // Recent Transactions (for 'transactions' tab)
             $recentTransactions = (clone $baseTransactionQuery)
                 ->with('branch:id,name,code')
                 ->orderBy('transaction_date', 'desc')
@@ -153,7 +183,6 @@ class OwnerReportController extends Controller
                     'created_at' => $transaction->transaction_date->toDateTimeString(),
                 ])->values();
 
-            // Recent Expenses (for 'expenses' tab)
             $recentExpenses = (clone $baseExpenseQuery)
                 ->with('branch:id,name,code')
                 ->orderBy('expense_date', 'desc')
@@ -170,9 +199,8 @@ class OwnerReportController extends Controller
                     'created_at' => $expense->expense_date->toDateTimeString(),
                 ])->values();
 
-            // Branch Summary (for 'all branches' view by owner)
             $branchSummary = collect();
-            if ($isOwner && !$branchId) { // Only for owner and 'all branches' selected
+            if ($isOwner && !$branchId) {
                 $allBranches = Branch::all();
                 $branchSummary = $allBranches->map(function ($branch) use ($queryStartDate, $queryEndDate) {
                     $branchTransactions = Transaction::query()
@@ -221,6 +249,133 @@ class OwnerReportController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengambil data laporan.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
+    }
+
+    public function export(Request $request)
+    {
+        try {
+            [$period, $queryStartDate, $queryEndDate] = $this->resolveReportPeriod($request);
+            $branchId = $request->query('branch_id');
+            $format = $request->query('format', 'csv');
+
+            if ($format !== 'csv') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Format export tidak didukung.',
+                ], 422);
+            }
+
+            if ($request->user()?->role !== 'owner' && !$branchId) {
+                $branchId = $request->user()?->branch_id;
+            }
+
+            [$transactionQuery, $expenseQuery] = $this->getFilteredQueries($queryStartDate, $queryEndDate, $branchId);
+
+            $transactions = (clone $transactionQuery)
+                ->with('branch:id,name,code')
+                ->orderBy('transaction_date')
+                ->orderBy('id')
+                ->get();
+
+            $expenses = (clone $expenseQuery)
+                ->with('branch:id,name,code')
+                ->orderBy('expense_date')
+                ->orderBy('id')
+                ->get();
+
+            $totalRevenue = (clone $transactionQuery)->sum('grand_total');
+            $totalTransactions = (clone $transactionQuery)->count();
+            $totalExpenses = (clone $expenseQuery)->sum('amount');
+            $grossProfit = $totalRevenue - $totalExpenses;
+            $averageTransaction = $totalTransactions > 0 ? $totalRevenue / $totalTransactions : 0;
+            $branchLabel = $this->resolveBranchLabel($branchId);
+
+            $topProducts = (clone $transactionQuery)
+                ->join('transaction_items', 'transactions.id', '=', 'transaction_items.transaction_id')
+                ->select(
+                    'transaction_items.product_code',
+                    'transaction_items.product_name',
+                    DB::raw('SUM(transaction_items.quantity) as quantity_sold'),
+                    DB::raw('SUM(transaction_items.subtotal) as total_revenue')
+                )
+                ->groupBy('transaction_items.product_code', 'transaction_items.product_name')
+                ->orderByDesc('quantity_sold')
+                ->take(10)
+                ->get();
+
+            $filenamePeriod = $period === 'today' ? 'hari-ini' : ($period === '7days' ? '7-hari' : ($period === 'custom' ? 'custom' : 'bulan-ini'));
+            $filename = 'laporan-owner-' . $filenamePeriod . '-' . now()->format('Y-m-d') . '.csv';
+
+            return response()->streamDownload(function () use ($transactions, $expenses, $topProducts, $totalRevenue, $totalExpenses, $grossProfit, $totalTransactions, $averageTransaction, $period, $branchLabel, $queryStartDate, $queryEndDate) {
+                echo "\xEF\xBB\xBF";
+                $handle = fopen('php://output', 'w');
+
+                fputcsv($handle, ['RINGKASAN']);
+                fputcsv($handle, ['Keterangan', 'Nilai']);
+                fputcsv($handle, ['Total Pendapatan', $totalRevenue]);
+                fputcsv($handle, ['Total Pengeluaran', $totalExpenses]);
+                fputcsv($handle, ['Laba Kotor', $grossProfit]);
+                fputcsv($handle, ['Total Transaksi', $totalTransactions]);
+                fputcsv($handle, ['Rata-rata Transaksi', round($averageTransaction)]);
+                fputcsv($handle, ['Periode', $period]);
+                fputcsv($handle, ['Cabang', $branchLabel]);
+                fputcsv($handle, []);
+
+                fputcsv($handle, ['TRANSAKSI']);
+                fputcsv($handle, ['Tanggal', 'Invoice', 'Cabang', 'Kasir', 'Metode Pembayaran', 'Status', 'Total']);
+                foreach ($transactions as $transaction) {
+                    fputcsv($handle, [
+                        optional($transaction->transaction_date)->format('Y-m-d H:i:s'),
+                        $transaction->invoice_number,
+                        $transaction->branch?->name ?? '-',
+                        $transaction->cashier_name,
+                        $transaction->payment_method,
+                        $transaction->status,
+                        $transaction->grand_total,
+                    ]);
+                }
+                fputcsv($handle, []);
+
+                fputcsv($handle, ['PENGELUARAN']);
+                fputcsv($handle, ['Tanggal', 'Cabang', 'Kategori', 'Deskripsi', 'Pengguna', 'Nominal', 'Status']);
+                foreach ($expenses as $expense) {
+                    fputcsv($handle, [
+                        optional($expense->expense_date)->format('Y-m-d'),
+                        $expense->branch?->name ?? '-',
+                        $expense->category,
+                        $expense->description,
+                        $expense->user_name,
+                        $expense->amount,
+                        $expense->status,
+                    ]);
+                }
+                fputcsv($handle, []);
+
+                fputcsv($handle, ['PRODUK TERLARIS']);
+                fputcsv($handle, ['Peringkat', 'Kode Produk', 'Nama Produk', 'Qty Terjual', 'Total Pendapatan']);
+                $rank = 1;
+                foreach ($topProducts as $product) {
+                    fputcsv($handle, [
+                        $rank++,
+                        $product->product_code,
+                        $product->product_name,
+                        $product->quantity_sold,
+                        $product->total_revenue,
+                    ]);
+                }
+
+                fclose($handle);
+            }, $filename, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal export laporan. Silakan coba lagi.',
                 'error' => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }

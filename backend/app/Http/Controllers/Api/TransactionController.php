@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\StockHistory;
 use App\Models\Transaction;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -22,6 +23,10 @@ class TransactionController extends Controller
             $query->where('branch_id', $request->branch_id);
         }
 
+        if ($request->filled('username')) {
+            $query->where('username', $request->username);
+        }
+
         if ($request->filled('date')) {
             $query->whereDate('transaction_date', $request->date);
         }
@@ -30,12 +35,36 @@ class TransactionController extends Controller
             $query->where('status', $request->status);
         }
 
+        $perPage = $request->query('per_page', 10);
         $transactions = $query->get();
+
+        $summaryQuery = clone $query;
+
+        $totalReceipts = (clone $summaryQuery)->count();
+        $totalSales = (clone $summaryQuery)->sum('grand_total');
+        $cashTotal = (clone $summaryQuery)->where('payment_method', 'Tunai')->sum('grand_total');
+        $qrisTotal = (clone $summaryQuery)->where('payment_method', 'QRIS')->sum('grand_total');
+        $transferTotal = (clone $summaryQuery)->where('payment_method', 'Transfer')->sum('grand_total');
+        $cashCount = (clone $summaryQuery)->where('payment_method', 'Tunai')->count();
+        $qrisCount = (clone $summaryQuery)->where('payment_method', 'QRIS')->count();
+        $transferCount = (clone $summaryQuery)->where('payment_method', 'Transfer')->count();
 
         return response()->json([
             'success' => true,
             'message' => 'Data transaksi berhasil diambil.',
-            'data' => $transactions,
+            'data' => [
+                'summary' => [
+                    'total_receipts' => $totalReceipts,
+                    'total_sales' => $totalSales,
+                    'cash_total' => $cashTotal,
+                    'qris_total' => $qrisTotal,
+                    'transfer_total' => $transferTotal,
+                    'cash_count' => $cashCount,
+                    'qris_count' => $qrisCount,
+                    'transfer_count' => $transferCount,
+                ],
+                'transactions' => $transactions,
+            ],
         ]);
     }
 
@@ -56,6 +85,19 @@ class TransactionController extends Controller
         ]);
 
         try {
+            $activeShift = Shift::where('username', $validatedData['username'])
+                ->where('branch_id', $validatedData['branch_id'])
+                ->where('status', 'Berjalan')
+                ->latest('id')
+                ->first();
+
+            if (!$activeShift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anda belum membuka shift. Silakan buka shift terlebih dahulu sebelum melakukan transaksi.',
+                ], 422);
+            }
+
             $transaction = DB::transaction(function () use ($validatedData) {
                 $subtotal = 0;
                 $totalItem = 0;
@@ -189,3 +231,5 @@ class TransactionController extends Controller
         return 'INV-' . $date . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
     }
 }
+
+

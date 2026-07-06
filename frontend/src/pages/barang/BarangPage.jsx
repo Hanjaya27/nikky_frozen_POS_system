@@ -134,6 +134,10 @@ function BarangPage() {
 
   return (
     <div className="min-h-screen bg-[#FEF6EC] px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mb-5">
+        <h1 className="text-2xl font-black tracking-tight text-[#2A1712] sm:text-3xl">Barang &amp; Stok</h1>
+        <p className="mt-1 text-sm font-semibold text-[#7A6258]">Pantau stok produk, status, dan harga di semua cabang.</p>
+      </div>
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Total Produk" value={summary.total_products ?? 0} note="Produk aktif" icon={Boxes} tone="red" />
         <StatCard label="Stok Aman" value={summary.safe_stock_count ?? 0} note="Di atas minimum stok" icon={CheckCircle2} tone="green" />
