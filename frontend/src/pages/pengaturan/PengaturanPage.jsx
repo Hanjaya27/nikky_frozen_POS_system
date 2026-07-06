@@ -261,9 +261,6 @@ function PengaturanPage() {
             <ToggleRow title="Auto Cetak Struk" description="Cetak struk otomatis setelah transaksi." icon={Printer} checked={Boolean(settings?.transaction?.auto_print_receipt)} onChange={() => updateSetting("transaction", "auto_print_receipt", !settings?.transaction?.auto_print_receipt)} />
             <ToggleRow title="Wajib Buka Shift" description="Kasir harus buka shift sebelum transaksi." icon={Clock3} checked={Boolean(settings?.transaction?.require_shift_open)} onChange={() => updateSetting("transaction", "require_shift_open", !settings?.transaction?.require_shift_open)} />
           </div>
-          <div className="mt-4 rounded-2xl border border-[#f1d8c8] bg-[#fffaf3] p-4 text-xs font-semibold text-[#8a6f66]">
-            Hak akses menu kasir dikelola melalui <button onClick={() => navigate("/owner/role-permission")} className="font-black text-[#d50000] underline hover:text-[#a80000]">Role &amp; Permission</button>.
-          </div>
         </div>
       )}
 

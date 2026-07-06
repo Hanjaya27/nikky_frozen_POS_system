@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
@@ -9,8 +9,6 @@ use App\Http\Controllers\Api\ShiftController;
 use App\Http\Controllers\Api\LoginActivityController;
 use App\Http\Controllers\Api\OwnerLoginActivityController;
 use App\Http\Controllers\Api\UserController;
-use App\Http\Controllers\Api\RolePermissionController;
-use App\Http\Controllers\Api\OwnerRolePermissionController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\OwnerSettingController;
 use App\Http\Controllers\Api\StockHistoryController;
@@ -112,18 +110,6 @@ Route::post('/users', [UserController::class, 'store']);
 Route::put('/users/{id}', [UserController::class, 'update']);
 Route::delete('/users/{id}', [UserController::class, 'destroy']);
 
-/*
-|--------------------------------------------------------------------------
-| ROLE PERMISSIONS API
-|--------------------------------------------------------------------------
-*/
-
-Route::get('/owner/role-permissions', [OwnerRolePermissionController::class, 'index']);
-Route::patch('/owner/role-permissions/{permissionId}', [OwnerRolePermissionController::class, 'update']);
-Route::post('/owner/role-permissions/enable-all-admin', [OwnerRolePermissionController::class, 'enableAllAdmin']);
-Route::post('/owner/role-permissions/enable-all-cashier', [OwnerRolePermissionController::class, 'enableAllCashier']);
-Route::post('/owner/role-permissions/safe-defaults', [OwnerRolePermissionController::class, 'safeDefaults']);
-Route::post('/owner/role-permissions/reset', [OwnerRolePermissionController::class, 'reset']);
 
 Route::get('/settings', [SettingController::class, 'index']);
 Route::put('/settings', [SettingController::class, 'update']);

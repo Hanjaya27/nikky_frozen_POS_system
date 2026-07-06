@@ -732,18 +732,6 @@ export async function getOwnerSettingsCached(force = false) {
   return result.data;
 }
 
-export async function getPermissionsApiCached(force = false) {
-  if (force) apiCache.delete(`${API_BASE_URL}/permissions`);
-  const result = await cachedRequest(`${API_BASE_URL}/permissions`, { method: "GET" }, "Gagal mengambil data permissions.", 300000);
-  return result.data;
-}
-
-export async function getOwnerRolePermissionsCached(force = false) {
-  if (force) apiCache.delete(`${API_BASE_URL}/owner/role-permissions`);
-  const result = await cachedRequest(`${API_BASE_URL}/owner/role-permissions`, { method: "GET" }, "Gagal mengambil data role permission.", 300000);
-  return result.data;
-}
-
 
 
 export async function updateExpense(id, expenseData) {
@@ -1334,122 +1322,6 @@ export async function deleteUser(id) {
 
 /* =========================
 
-   PERMISSIONS API
-
-========================= */
-
-
-
-export async function getOwnerRolePermissions(params = {}) {
-
-  const queryString = buildQueryParams(params);
-
-  const url = queryString
-
-    ? `${API_BASE_URL}/owner/role-permissions?${queryString}`
-
-    : `${API_BASE_URL}/owner/role-permissions`;
-
-
-
-  const result = await request(url, { method: "GET" }, "Gagal mengambil data permission.");
-
-
-
-  return result.data;
-
-}
-
-
-
-export async function updateRolePermission(permissionId, payload) {
-
-  const result = await request(
-
-    `${API_BASE_URL}/owner/role-permissions/${permissionId}`,
-
-    {
-
-      method: "PATCH",
-
-      body: JSON.stringify(payload),
-
-    },
-
-    "Gagal memperbarui permission."
-
-  );
-
-
-
-  return result.data;
-
-}
-
-
-
-export async function enableAllAdminPermissions() {
-
-  const result = await request(`${API_BASE_URL}/owner/role-permissions/enable-all-admin`, { method: "POST" }, "Gagal mengaktifkan permission admin.");
-
-  return result.data;
-
-}
-
-
-
-export async function enableAllCashierPermissions() {
-
-  const result = await request(`${API_BASE_URL}/owner/role-permissions/enable-all-cashier`, { method: "POST" }, "Gagal mengaktifkan permission kasir.");
-
-  return result.data;
-
-}
-
-
-
-export async function applySafeDefaultPermissions() {
-
-  const result = await request(`${API_BASE_URL}/owner/role-permissions/safe-defaults`, { method: "POST" }, "Gagal menerapkan standar aman.");
-
-  return result.data;
-
-}
-
-
-
-export async function resetRolePermissions() {
-
-  const result = await request(`${API_BASE_URL}/owner/role-permissions/reset`, { method: "POST" }, "Gagal reset permission.");
-
-  return result.data;
-
-}
-
-
-
-export const getPermissionsApi = getOwnerRolePermissions;
-
-export const resetPermissionsApi = resetRolePermissions;
-
-export async function updateSinglePermissionApi(permissionId, kasirAccess) {
-
-  return updateRolePermission(permissionId, { role: "cashier", allowed: kasirAccess });
-
-}
-
-export async function updatePermissionsApi(permissions) {
-
-  await Promise.all(permissions.map((permission) => updateSinglePermissionApi(permission.permission_id, permission.kasir_access)));
-
-  return getOwnerRolePermissions();
-
-}
-
-
-
-/* =========================
-
    SETTINGS API
 
 ========================= */
@@ -1649,28 +1521,6 @@ const api = {
   updateUser,
 
   deleteUser,
-
-  getOwnerRolePermissions,
-  getOwnerRolePermissionsCached,
-
-  updateRolePermission,
-
-  enableAllAdminPermissions,
-
-  enableAllCashierPermissions,
-
-  applySafeDefaultPermissions,
-
-  resetRolePermissions,
-
-  getPermissionsApi,
-  getPermissionsApiCached,
-
-  resetPermissionsApi,
-
-  updateSinglePermissionApi,
-
-  updatePermissionsApi,
 
   getSettingsApi,
 

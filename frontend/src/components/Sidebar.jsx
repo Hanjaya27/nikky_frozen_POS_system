@@ -1,40 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  AlertTriangle,
   BarChart3,
   Boxes,
   Clock3,
   History,
   LogOut,
-  PackageMinus,
   PackagePlus,
   PackageSearch,
   ReceiptText,
   Settings,
-  ShieldCheck,
   ShoppingCart,
   ChevronsLeft,
   ChevronsRight,
   Snowflake,
   UsersRound,
   WalletCards,
-  Warehouse,
   X,
 } from "lucide-react";
 
 import * as api from "../services/api";
 import ConfirmModal from "./ConfirmModal";
 
-const PERMISSION_STORAGE_KEY = "nikky_user_permissions";
-const PERMISSION_MIGRATION_KEY = "nikky_permissions_initialized_v3";
 const SIDEBAR_COLLAPSED_KEY = "nikky_sidebar_collapsed_final";
-
-export const DEFAULT_KASIR_PERMISSIONS = [
-  { id: "pos", name: "Kasir", kasirAccess: true },
-  { id: "shift", name: "Shift Saya", kasirAccess: true },
-  { id: "transaksi", name: "Riwayat Transaksi", kasirAccess: true },
-];
 
 const ownerMenus = [
   { name: "Dashboard", path: "/owner/dashboard", icon: BarChart3 },
@@ -43,7 +31,6 @@ const ownerMenus = [
   { name: "Pengeluaran", path: "/pengeluaran", icon: WalletCards },
   { name: "Data User", path: "/owner/data-kasir", icon: UsersRound },
   { name: "Aktivitas Login", path: "/owner/aktivitas-login", icon: History },
-  { name: "Role Permission", path: "/owner/role-permission", icon: ShieldCheck },
   { name: "Pengaturan", path: "/pengaturan", icon: Settings },
 ];
 
@@ -55,14 +42,9 @@ const adminMenus = [
 ];
 
 const kasirMenus = [
-  { name: "Kasir", path: "/", icon: ShoppingCart, permissionId: "pos" },
-  { name: "Shift Saya", path: "/shift", icon: Clock3, permissionId: "shift" },
-  {
-    name: "Riwayat Transaksi",
-    path: "/transaksi",
-    icon: History,
-    permissionId: "transaksi",
-  },
+  { name: "Kasir", path: "/", icon: ShoppingCart },
+  { name: "Shift Saya", path: "/shift", icon: Clock3 },
+  { name: "Riwayat Transaksi", path: "/transaksi", icon: History },
 ];
 
 function getCurrentUser() {
@@ -79,63 +61,6 @@ function getCurrentUser() {
   }
 }
 
-function normalizePermission(permission) {
-  return {
-    id: permission.id || permission.permission_id,
-    name: permission.name,
-    kasirAccess:
-      permission.kasirAccess !== undefined
-        ? Boolean(permission.kasirAccess)
-        : Boolean(permission.kasir_access),
-  };
-}
-
-function mergePermissions(savedPermissions) {
-  if (!Array.isArray(savedPermissions)) return DEFAULT_KASIR_PERMISSIONS;
-
-  const normalizedPermissions = savedPermissions.map(normalizePermission);
-
-  return DEFAULT_KASIR_PERMISSIONS.map((defaultPermission) => {
-    const foundPermission = normalizedPermissions.find(
-      (permission) => permission.id === defaultPermission.id,
-    );
-
-    if (!foundPermission) return defaultPermission;
-
-    return {
-      ...defaultPermission,
-      kasirAccess: Boolean(foundPermission.kasirAccess),
-    };
-  });
-}
-
-function writeStoredPermissions(permissions, role) {
-  const key = `${PERMISSION_STORAGE_KEY}_${role}`;
-  localStorage.setItem(key, JSON.stringify(permissions));
-  window.dispatchEvent(new Event("nikky_permissions_updated"));
-}
-
-function getStoredPermissions(role) {
-  const key = `${PERMISSION_STORAGE_KEY}_${role}`;
-  const saved = localStorage.getItem(key);
-
-  if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch (error) {
-      console.error("Gagal membaca permission dari localStorage:", error);
-      return [];
-    }
-  }
-  return [];
-}
-
-function getSavedPermissions(role) {
-  return getStoredPermissions(role);
-}
-
-export { getSavedPermissions };
-
 function getInitialCollapsedState() {
   return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
 }
@@ -144,12 +69,8 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
   const navigate = useNavigate();
 
   const initialUser = useMemo(() => getCurrentUser(), []);
-  const initialRole = String(initialUser?.role || "cashier").toLowerCase().replace("kasir", "cashier");
 
   const [currentUser, setCurrentUser] = useState(initialUser);
-  const [permissions, setPermissions] = useState(() =>
-    getStoredPermissions(initialRole),
-  );
   const [isCollapsed, setIsCollapsed] = useState(getInitialCollapsedState);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -159,10 +80,6 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
   const isOwner = userRole === "owner";
   const isAdmin = userRole === "admin";
   const isKasir = userRole === "cashier";
-
-  const syncPermissions = () => {
-    setPermissions(getStoredPermissions(userRole));
-  };
 
   const toggleCollapse = () => {
     setIsCollapsed((previousValue) => {
@@ -185,35 +102,13 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
     }
   }, [navigate]);
 
-  useEffect(() => {
-    syncPermissions();
-
-    window.addEventListener("storage", syncPermissions);
-    window.addEventListener("focus", syncPermissions);
-    window.addEventListener("nikky_permissions_updated", syncPermissions);
-
-    return () => {
-      window.removeEventListener("storage", syncPermissions);
-      window.removeEventListener("focus", syncPermissions);
-      window.removeEventListener("nikky_permissions_updated", syncPermissions);
-    };
-  }, []);
-
   const menus = useMemo(() => {
     if (isOwner) return ownerMenus;
     if (isAdmin) return adminMenus;
-
-    if (isKasir) {
-      const kasirPermissions = getStoredPermissions("cashier").length > 0 ? getStoredPermissions("cashier") : getStoredPermissions("kasir");
-      const fallback = kasirPermissions.length > 0 ? kasirPermissions : DEFAULT_KASIR_PERMISSIONS;
-      return kasirMenus.filter((menu) => {
-        const permission = fallback.find((p) => p.id === menu.permissionId);
-        return permission && permission.kasirAccess;
-      });
-    }
+    if (isKasir) return kasirMenus;
 
     return [];
-  }, [isOwner, isAdmin, isKasir, permissions, userRole]);
+  }, [isOwner, isAdmin, isKasir]);
 
   const clearLoginSession = () => {
     localStorage.removeItem("nikky_user");
