@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Search, Edit, Trash2, X, Check, Image as ImageIcon, Store, Package } from "lucide-react";
 import { getProductImageUrl } from "../../utils/image";
 import * as api from "../../services/api";
+import { formatNumberInput, parseNumberInput } from "../../utils/formatters";
 
 function getCurrentUser() {
   const saved = localStorage.getItem("nikky_user");
@@ -365,7 +366,7 @@ function AdminProdukPage() {
                       </div>
                       <div>
                         <label className="mb-1.5 block text-xs font-bold text-[#7A6258]">Harga (Rp)</label>
-                        <input required type="number" min="0" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} className="w-full rounded-xl border border-[#EBCDB8] bg-white px-3 py-2.5 text-sm font-bold text-[#2A1712] outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20" placeholder="0" />
+                        <input required type="text" inputMode="numeric" value={formatNumberInput(formData.price)} onChange={(e) => setFormData({ ...formData, price: parseNumberInput(e.target.value) })} className="w-full rounded-xl border border-[#EBCDB8] bg-white px-3 py-2.5 text-sm font-bold text-[#2A1712] outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20" placeholder="0" />
                       </div>
                     </div>
 

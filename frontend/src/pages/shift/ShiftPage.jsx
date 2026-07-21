@@ -11,6 +11,7 @@ import {
   Loader2,
 } from "lucide-react";
 import * as api from "../../services/api";
+import { formatNumberInput, parseNumberInput } from "../../utils/formatters";
 
 function formatRupiah(value) {
   return new Intl.NumberFormat("id-ID", {
@@ -266,16 +267,19 @@ function ShiftPage() {
             <div className="space-y-4">
               <div>
                 <label className="mb-2 block text-sm font-bold text-[#2A1712]">Kas Awal</label>
-                <div className="relative">
-                  <Banknote className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#C80503]" />
+                <div className="relative flex items-center">
+                  <Banknote className="pointer-events-none absolute left-3 h-5 w-5 text-[#C80503]" />
+                  <span className="pointer-events-none absolute left-10 text-base font-bold text-[#7A6258]">
+                    Rp
+                  </span>
                   <input
-                    type="number"
-                    min="0"
-                    value={openingCash}
-                    onChange={(event) => setOpeningCash(event.target.value)}
-                    placeholder="1000000"
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(openingCash)}
+                    onChange={(event) => setOpeningCash(parseNumberInput(event.target.value))}
+                    placeholder="1.000.000"
                     disabled={isLoading || isSubmitting}
-                    className="w-full rounded-xl border border-[#EBCDB8] bg-white py-3.5 pl-11 pr-4 text-base font-bold text-[#2A1712] outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20 disabled:cursor-not-allowed disabled:bg-gray-50"
+                    className="w-full rounded-xl border border-[#EBCDB8] bg-white py-3.5 pl-[4.5rem] pr-4 text-base font-bold text-[#2A1712] outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20 disabled:cursor-not-allowed disabled:bg-gray-50"
                   />
                 </div>
               </div>
@@ -294,16 +298,19 @@ function ShiftPage() {
             <div className="space-y-4">
               <div>
                 <label className="mb-2 block text-sm font-bold text-[#2A1712]">Kas Akhir</label>
-                <div className="relative">
-                  <Banknote className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#2A1712]" />
+                <div className="relative flex items-center">
+                  <Banknote className="pointer-events-none absolute left-3 h-5 w-5 text-[#2A1712]" />
+                  <span className="pointer-events-none absolute left-10 text-base font-bold text-[#7A6258]">
+                    Rp
+                  </span>
                   <input
-                    type="number"
-                    min="0"
-                    value={closingCash}
-                    onChange={(event) => setClosingCash(event.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(closingCash)}
+                    onChange={(event) => setClosingCash(parseNumberInput(event.target.value))}
                     placeholder="0"
                     disabled={isLoading || isSubmitting}
-                    className="w-full rounded-xl border border-[#EBCDB8] bg-white py-3.5 pl-11 pr-4 text-base font-bold text-[#2A1712] outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20 disabled:cursor-not-allowed disabled:bg-gray-50"
+                    className="w-full rounded-xl border border-[#EBCDB8] bg-white py-3.5 pl-[4.5rem] pr-4 text-base font-bold text-[#2A1712] outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20 disabled:cursor-not-allowed disabled:bg-gray-50"
                   />
                 </div>
               </div>

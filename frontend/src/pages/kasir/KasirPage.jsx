@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Banknote,
@@ -23,6 +23,7 @@ import {
 
 import * as api from "../../services/api";
 import { getProductImageUrl } from "../../utils/image";
+import { formatNumberInput, parseNumberInput } from "../../utils/formatters";
 
 const paymentMethods = [
   { id: "Tunai", label: "Tunai", icon: Banknote },
@@ -317,14 +318,20 @@ function PaymentModal({
               Uang Diterima
             </label>
 
-            <input
-              type="number"
-              value={cashReceived}
-              onChange={(event) => setCashReceived(event.target.value)}
-              disabled={isSubmitting}
-              placeholder="Masukkan nominal uang"
-              className="w-full rounded-xl border border-[#EBCDB8] bg-white px-4 py-3 text-lg font-bold text-[#2A1712] outline-none focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20"
-            />
+            <div className="relative flex items-center">
+              <span className="pointer-events-none absolute left-4 text-lg font-bold text-[#7A6258]">
+                Rp
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={formatNumberInput(cashReceived)}
+                onChange={(event) => setCashReceived(parseNumberInput(event.target.value))}
+                disabled={isSubmitting}
+                placeholder="0"
+                className="w-full rounded-xl border border-[#EBCDB8] bg-white py-3 pl-12 pr-4 text-lg font-bold text-[#2A1712] outline-none focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20"
+              />
+            </div>
 
             <div className="mt-3 flex items-center justify-between rounded-xl bg-[#FFF6EA] px-4 py-3 border border-[#EBCDB8]">
               <span className="text-sm font-bold text-[#7A6258]">Kembalian</span>

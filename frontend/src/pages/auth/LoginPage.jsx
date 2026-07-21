@@ -1,21 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Snowflake, User, Lock, Store, Clock, Eye, EyeOff, LogIn } from "lucide-react";
+import { Snowflake, User, Lock, Eye, EyeOff, LogIn } from "lucide-react";
 
 import { loginUser } from "../../services/api";
 import frozenFoodImage from "../../assets/Frozen food.jpg";
-
-const branches = ["Cabang 1", "Cabang 2"];
-const shifts = ["Shift Pagi", "Shift Sore"];
 
 function normalizeRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
   if (normalized === "kasir") return "cashier";
   return normalized;
-}
-
-function isActiveStatus(status) {
-  return ["active", "aktif", "1", "true"].includes(String(status || "").trim().toLowerCase());
 }
 
 function formatDateTime(date = new Date()) {
@@ -33,11 +26,8 @@ function LoginPage() {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    userType: "cashier",
     username: "",
     password: "",
-    branch: "Cabang 1",
-    shift: "Shift Pagi",
   });
 
   const [errorMessage, setErrorMessage] = useState("");
@@ -50,29 +40,6 @@ function LoginPage() {
     setFormData((prevData) => ({
       ...prevData,
       [name]: value,
-    }));
-
-    setErrorMessage("");
-  };
-
-  const handleUserTypeChange = (userType) => {
-    let defaultBranch = "Cabang 1";
-    let defaultShift = "Shift Pagi";
-    
-    if (userType === "owner") {
-      defaultBranch = "Semua Cabang";
-      defaultShift = "Monitoring Owner";
-    } else if (userType === "admin") {
-      defaultShift = "Tanpa Shift";
-    }
-
-    setFormData((prevData) => ({
-      ...prevData,
-      userType,
-      username: "",
-      password: "",
-      branch: defaultBranch,
-      shift: defaultShift,
     }));
 
     setErrorMessage("");
@@ -106,30 +73,6 @@ function LoginPage() {
     );
   };
 
-  const validateLoginResult = (user) => {
-    if (normalizeRole(user.role) !== formData.userType) {
-      return `Jenis pengguna tidak sesuai dengan akun ini.`;
-    }
-
-    if (!isActiveStatus(user.status)) {
-      return "Akun ini sedang nonaktif. Silakan hubungi owner.";
-    }
-
-    if (normalizeRole(user.role) === "cashier" || user.role === "admin") {
-      if (user.branch !== formData.branch) {
-        return `Akun ${user.username} hanya terdaftar untuk ${user.branch}.`;
-      }
-    }
-
-    if (normalizeRole(user.role) === "cashier") {
-      if (user.shift !== formData.shift) {
-        return `Akun ${user.username} terdaftar untuk ${user.shift}.`;
-      }
-    }
-
-    return "";
-  };
-
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -152,13 +95,6 @@ function LoginPage() {
         password: formData.password,
       });
 
-      const validationMessage = validateLoginResult(loginData.user);
-
-      if (validationMessage) {
-        setErrorMessage(validationMessage);
-        return;
-      }
-
       saveLoginSession(loginData);
 
       if (normalizeRole(loginData.user.role) === "owner") {
@@ -179,55 +115,35 @@ function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#FFF6EA] font-sans">
-      {/* Panel gambar sebelah kiri */}
-      <div className="relative hidden w-1/2 overflow-hidden lg:flex">
-        {/* Foto frozen food */}
-        <img
-          src={frozenFoodImage}
-          alt="Produk frozen food Nikky Frozen"
-          className="absolute inset-0 h-full w-full object-cover object-center"
-        />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden font-sans p-4">
+      {/* Background Layer */}
+      <img
+        src={frozenFoodImage}
+        alt="Background Nikky Frozen"
+        className="absolute inset-0 h-full w-full object-cover object-center"
+      />
+      
+      {/* Dark Blur Overlay */}
+      <div className="absolute inset-0 bg-[#1B120E]/60 backdrop-blur-sm" />
 
-        {/* Overlay gelap agar tulisan terlihat */}
-        <div className="absolute inset-0 bg-[#1B120E]/70" />
-
-        {/* Gradasi untuk memperjelas bagian bawah */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#1B120E]/90 via-transparent to-transparent" />
-
-        {/* Isi panel kiri */}
-        <div className="relative z-10 flex w-full flex-col justify-center p-14 text-white">
-          <div className="max-w-xl">
-            <h1 className="text-5xl font-black leading-tight tracking-tight drop-shadow-lg">
-              <span className="text-[#C80503]">Nikky</span> Frozen<br/>
-              POS System
-            </h1>
-
-            <div className="mt-6 h-1 w-24 rounded-full bg-[#C80503]" />
-
-            <p className="mt-6 text-lg leading-relaxed text-slate-200 drop-shadow-md">
-              Sistem kasir dan manajemen stok untuk membantu pengelolaan transaksi, cabang, shift kasir, stok barang, pengeluaran, dan laporan toko.
-            </p>
+      {/* Login Card */}
+      <div className="relative z-10 w-full max-w-[420px] rounded-[2rem] border border-white/20 bg-[#FFFDF8] p-8 sm:p-10 shadow-2xl">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#C80503] text-white shadow-lg shadow-[#C80503]/30">
+            <Snowflake className="h-7 w-7" />
           </div>
+
+          <h1 className="text-2xl font-black text-[#2A1712] tracking-tight">
+            Nikky Frozen
+          </h1>
+          <h2 className="text-sm font-black text-[#C80503] uppercase tracking-wider mb-2">
+            POS System
+          </h2>
+
+          <p className="mt-2 text-xs font-semibold text-[#7A6258]">
+            Masukkan username dan password untuk melanjutkan.
+          </p>
         </div>
-      </div>
-
-      {/* Panel login sebelah kanan */}
-      <div className="flex w-full items-center justify-center px-4 py-4 lg:w-1/2">
-        <div className="w-full max-w-md rounded-[2rem] border border-[#EBCDB8] bg-[#FFFDF8] p-6 lg:p-8 shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto">
-          <div className="mb-6 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[#C80503] text-white shadow-md shadow-[#C80503]/20">
-              <Snowflake className="h-6 w-6" />
-            </div>
-
-            <h2 className="text-2xl font-bold text-[#2A1712]">
-              Login Sistem
-            </h2>
-
-            <p className="mt-1 text-xs text-[#7A6258] px-2">
-              Login menggunakan akun dari database backend.
-            </p>
-          </div>
 
           {errorMessage && (
             <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600">
@@ -236,47 +152,6 @@ function LoginPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-bold text-[#2A1712]">
-                Jenis Pengguna
-              </label>
-              
-              <div className="flex rounded-xl border border-[#EBCDB8] bg-white p-1">
-                <button
-                  type="button"
-                  onClick={() => handleUserTypeChange("cashier")}
-                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all duration-200 ${formData.userType === "cashier"
-                      ? "bg-[#C80503] text-white shadow-sm"
-                      : "text-[#7A6258] hover:bg-[#FFF6EA]"
-                    }`}
-                >
-                  Kasir
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleUserTypeChange("admin")}
-                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all duration-200 ${formData.userType === "admin"
-                      ? "bg-[#C80503] text-white shadow-sm"
-                      : "text-[#7A6258] hover:bg-[#FFF6EA]"
-                    }`}
-                >
-                  Admin
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleUserTypeChange("owner")}
-                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all duration-200 ${formData.userType === "owner"
-                      ? "bg-[#C80503] text-white shadow-sm"
-                      : "text-[#7A6258] hover:bg-[#FFF6EA]"
-                    }`}
-                >
-                  Owner
-                </button>
-              </div>
-            </div>
-
             <div>
               <label className="mb-1.5 block text-sm font-bold text-[#2A1712]">
                 Username
@@ -324,72 +199,10 @@ function LoginPage() {
               </div>
             </div>
 
-            <div>
-              <label className="mb-1.5 block text-sm font-bold text-[#2A1712]">
-                Cabang
-              </label>
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#C80503]">
-                  <Store className="h-4 w-4" />
-                </div>
-                <select
-                  name="branch"
-                  value={formData.branch}
-                  onChange={handleChange}
-                  disabled={formData.userType === "owner"}
-                  className={`w-full appearance-none rounded-xl border border-[#EBCDB8] py-2.5 pl-10 pr-10 text-sm outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20 ${formData.userType === "owner"
-                      ? "cursor-not-allowed bg-[#FFF6EA] text-[#7A6258]"
-                      : "bg-white text-[#2A1712]"
-                    }`}
-                >
-                  {formData.userType === "owner" ? (
-                    <option value="Semua Cabang">Semua Cabang</option>
-                  ) : (
-                    branches.map((branch) => (
-                      <option key={branch} value={branch}>
-                        {branch}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-[#2A1712]">
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-              </div>
-            </div>
-
-            {formData.userType === "cashier" && (
-              <div>
-                <label className="mb-1.5 block text-sm font-bold text-[#2A1712]">
-                  Shift
-                </label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#C80503]">
-                    <Clock className="h-4 w-4" />
-                  </div>
-                  <select
-                    name="shift"
-                    value={formData.shift}
-                    onChange={handleChange}
-                    className="w-full appearance-none rounded-xl border border-[#EBCDB8] bg-white py-2.5 pl-10 pr-10 text-sm text-[#2A1712] outline-none transition focus:border-[#C80503] focus:ring-2 focus:ring-[#C80503]/20"
-                  >
-                    {shifts.map((shift) => (
-                      <option key={shift} value={shift}>
-                        {shift}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-[#2A1712]">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 mt-2 font-bold text-white shadow-md transition-all ${isSubmitting
+              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 mt-6 font-bold text-white shadow-md transition-all ${isSubmitting
                   ? "cursor-not-allowed bg-slate-400"
                   : "bg-[#C80503] hover:bg-[#8B0306] hover:shadow-[#C80503]/30"
                 }`}
@@ -404,7 +217,6 @@ function LoginPage() {
             </button>
           </form>
         </div>
-      </div>
     </div>
   );
 }
