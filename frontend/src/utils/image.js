@@ -1,4 +1,4 @@
-const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || 'http://127.0.0.1:8000';
+const API_ORIGIN = import.meta.env.VITE_API_ORIGIN;
 
 export function getProductImageUrl(product) {
   const raw = product?.image_url || product?.imageUrl || product?.image || "";

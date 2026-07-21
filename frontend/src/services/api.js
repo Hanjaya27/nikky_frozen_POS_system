@@ -1,6 +1,6 @@
 const API_BASE_URL =
 
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
+  import.meta.env.VITE_API_BASE_URL;
 
 
 
@@ -114,7 +114,7 @@ async function request(
 
     throw new Error(
 
-      "Tidak bisa terhubung ke backend. Pastikan Laravel berjalan di http://127.0.0.1:8000"
+      "Tidak bisa terhubung ke backend. Pastikan API URL sudah benar."
 
     );
 
@@ -212,7 +212,7 @@ async function requestBlob(url, options = {}, defaultErrorMessage = "Terjadi kes
 
     if (error instanceof Error) throw error;
 
-    throw new Error("Tidak bisa terhubung ke backend. Pastikan Laravel berjalan di http://127.0.0.1:8000");
+    throw new Error("Tidak bisa terhubung ke backend. Pastikan API URL sudah benar.");
 
   }
 
